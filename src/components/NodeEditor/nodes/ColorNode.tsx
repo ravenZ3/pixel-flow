@@ -1,11 +1,10 @@
-"use client";
-
 import { memo, useCallback } from "react";
-import { Handle, Position, NodeProps } from "reactflow";
+import { Handle, Position, NodeProps, useReactFlow } from "reactflow";
 import usePipelineStore from "@/store/pipelineStore";
 
 function ColorNode({ id, data }: NodeProps) {
-  const updateNodeData = usePipelineStore((s) => s.updateNodeData);
+  const { setNodes } = useReactFlow();
+  const executePipeline = usePipelineStore((s) => s.executePipeline);
 
   const brightness = data.brightness ?? 0;
   const contrast = data.contrast ?? 0;
@@ -15,9 +14,15 @@ function ColorNode({ id, data }: NodeProps) {
 
   const handleChange = useCallback(
     (key: string, value: number) => {
-      updateNodeData(id, { [key]: value });
+      setNodes((nodes) =>
+        nodes.map((n) =>
+          n.id === id ? { ...n, data: { ...n.data, [key]: value } } : n
+        )
+      );
+      // trigger pipeline after state update
+      setTimeout(() => executePipeline(), 0);
     },
-    [id, updateNodeData]
+    [id, setNodes, executePipeline]
   );
 
   return (

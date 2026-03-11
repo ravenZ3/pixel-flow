@@ -1,29 +1,27 @@
-"use client";
-
 import { memo, useCallback } from "react";
-import { Handle, Position, NodeProps } from "reactflow";
+import { Handle, Position, NodeProps, useReactFlow } from "reactflow";
 import usePipelineStore from "@/store/pipelineStore";
 
 const FILTER_TYPES = ["gaussian", "sharpen", "edge detect", "emboss"];
 
 function FilterNode({ id, data }: NodeProps) {
-  const updateNodeData = usePipelineStore((s) => s.updateNodeData);
+  const { setNodes } = useReactFlow();
+  const executePipeline = usePipelineStore((s) => s.executePipeline);
 
   const filterType = data.filterType ?? "gaussian";
   const strength = data.strength ?? 1;
 
-  const handleTypeChange = useCallback(
-    (e: React.ChangeEvent<HTMLSelectElement>) => {
-      updateNodeData(id, { filterType: e.target.value });
+  const handleChange = useCallback(
+    (key: string, value: string | number) => {
+      setNodes((nodes) =>
+        nodes.map((n) =>
+          n.id === id ? { ...n, data: { ...n.data, [key]: value } } : n
+        )
+      );
+      // trigger pipeline after state update
+      setTimeout(() => executePipeline(), 0);
     },
-    [id, updateNodeData]
-  );
-
-  const handleStrengthChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      updateNodeData(id, { strength: Number(e.target.value) });
-    },
-    [id, updateNodeData]
+    [id, setNodes, executePipeline]
   );
 
   return (
@@ -34,7 +32,7 @@ function FilterNode({ id, data }: NodeProps) {
           <label className="node-label">Type</label>
           <select
             value={filterType}
-            onChange={handleTypeChange}
+            onChange={(e) => handleChange("filterType", e.target.value)}
             className="node-select"
           >
             {FILTER_TYPES.map((t) => (
@@ -52,7 +50,7 @@ function FilterNode({ id, data }: NodeProps) {
             max={10}
             step={0.5}
             value={strength}
-            onChange={handleStrengthChange}
+            onChange={(e) => handleChange("strength", Number(e.target.value))}
             className="node-slider"
           />
         </div>

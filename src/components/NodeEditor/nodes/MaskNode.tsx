@@ -1,11 +1,10 @@
-"use client";
-
 import { memo, useRef, useEffect, useState, useCallback } from "react";
-import { Handle, Position, NodeProps } from "reactflow";
+import { Handle, Position, NodeProps, useReactFlow } from "reactflow";
 import usePipelineStore from "@/store/pipelineStore";
 
 function MaskNode({ id, data }: NodeProps) {
-  const updateNodeData = usePipelineStore((s) => s.updateNodeData);
+  const { setNodes } = useReactFlow();
+  const executePipeline = usePipelineStore((s) => s.executePipeline);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const brushSize = data.brushSize ?? 15;
@@ -21,17 +20,26 @@ function MaskNode({ id, data }: NodeProps) {
     }
   }, []);
 
+  const updateBitmapData = useCallback(async () => {
+    if (canvasRef.current) {
+      const bitmap = await createImageBitmap(canvasRef.current);
+      setNodes((nodes) =>
+        nodes.map((n) =>
+          n.id === id ? { ...n, data: { ...n.data, maskBitmap: bitmap } } : n
+        )
+      );
+      setTimeout(() => executePipeline(), 0);
+    }
+  }, [id, setNodes, executePipeline]);
+
   const startDrawing = (e: React.MouseEvent) => {
     setIsDrawing(true);
     draw(e);
   };
 
-  const stopDrawing = () => {
+  const stopDrawing = async () => {
     setIsDrawing(false);
-    if (canvasRef.current) {
-      const bitmap = canvasRef.current.transferToImageBitmap();
-      updateNodeData(id, { maskBitmap: bitmap });
-    }
+    await updateBitmapData();
   };
 
   const draw = (e: React.MouseEvent) => {
@@ -52,18 +60,28 @@ function MaskNode({ id, data }: NodeProps) {
     ctx.fill();
   };
 
-  const clearCanvas = useCallback(() => {
+  const clearCanvas = useCallback(async () => {
     const canvas = canvasRef.current;
     if (canvas) {
       const ctx = canvas.getContext("2d");
       if (ctx) {
         ctx.fillStyle = "black";
         ctx.fillRect(0, 0, canvas.width, canvas.height);
-        const bitmap = canvas.transferToImageBitmap();
-        updateNodeData(id, { maskBitmap: bitmap });
+        await updateBitmapData();
       }
     }
-  }, [id, updateNodeData]);
+  }, [updateBitmapData]);
+
+  const handleBrushChange = useCallback(
+    (val: number) => {
+      setNodes((nodes) =>
+        nodes.map((n) =>
+          n.id === id ? { ...n, data: { ...n.data, brushSize: val } } : n
+        )
+      );
+    },
+    [id, setNodes]
+  );
 
   return (
     <div className="node-surface">
@@ -86,7 +104,7 @@ function MaskNode({ id, data }: NodeProps) {
             min={2}
             max={30}
             value={brushSize}
-            onChange={(e) => updateNodeData(id, { brushSize: Number(e.target.value) })}
+            onChange={(e) => handleBrushChange(Number(e.target.value))}
             className="node-slider"
           />
         </div>

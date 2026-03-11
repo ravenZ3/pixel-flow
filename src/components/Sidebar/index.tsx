@@ -4,10 +4,11 @@ import { DragEvent, useCallback } from "react";
 
 const nodeItems = [
   { type: "ImageInput", label: "Image Input" },
+  { type: "Color", label: "Color" },
+  { type: "Filter", label: "Filter" },
+  { type: "Mask", label: "Mask" },
+  { type: "Blend", label: "Blend" },
   { type: "Preview", label: "Preview" },
-  { type: "Blur", label: "Blur" },
-  { type: "Brightness", label: "Brightness" },
-  { type: "MaskDraw", label: "Mask Draw" },
 ];
 
 export default function Sidebar() {

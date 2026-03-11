@@ -14,16 +14,18 @@ import "reactflow/dist/style.css";
 import usePipelineStore from "@/store/pipelineStore";
 import ImageInputNode from "./nodes/ImageInputNode";
 import PreviewNode from "./nodes/PreviewNode";
-import BlurNode from "./nodes/BlurNode";
-import BrightnessNode from "./nodes/BrightnessNode";
-import MaskDrawNode from "./nodes/MaskDrawNode";
+import ColorNode from "./nodes/ColorNode";
+import FilterNode from "./nodes/FilterNode";
+import MaskNode from "./nodes/MaskNode";
+import BlendNode from "./nodes/BlendNode";
 
 const nodeTypes = {
   ImageInput: ImageInputNode,
+  Color: ColorNode,
+  Filter: FilterNode,
+  Mask: MaskNode,
+  Blend: BlendNode,
   Preview: PreviewNode,
-  Blur: BlurNode,
-  Brightness: BrightnessNode,
-  MaskDraw: MaskDrawNode,
 };
 
 let nodeIdCounter = 0;

@@ -1,7 +1,5 @@
-"use client";
-
 import { memo, useCallback } from "react";
-import { Handle, Position, NodeProps } from "reactflow";
+import { Handle, Position, NodeProps, useReactFlow } from "reactflow";
 import usePipelineStore from "@/store/pipelineStore";
 
 const BLEND_MODES = [
@@ -14,23 +12,23 @@ const BLEND_MODES = [
 ];
 
 function BlendNode({ id, data }: NodeProps) {
-  const updateNodeData = usePipelineStore((s) => s.updateNodeData);
+  const { setNodes } = useReactFlow();
+  const executePipeline = usePipelineStore((s) => s.executePipeline);
 
   const opacity = data.opacity ?? 50;
   const blendMode = data.blendMode ?? "normal";
 
-  const handleModeChange = useCallback(
-    (e: React.ChangeEvent<HTMLSelectElement>) => {
-      updateNodeData(id, { blendMode: e.target.value });
+  const handleChange = useCallback(
+    (key: string, value: string | number) => {
+      setNodes((nodes) =>
+        nodes.map((n) =>
+          n.id === id ? { ...n, data: { ...n.data, [key]: value } } : n
+        )
+      );
+      // trigger pipeline after state update
+      setTimeout(() => executePipeline(), 0);
     },
-    [id, updateNodeData]
-  );
-
-  const handleOpacityChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      updateNodeData(id, { opacity: Number(e.target.value) });
-    },
-    [id, updateNodeData]
+    [id, setNodes, executePipeline]
   );
 
   return (
@@ -41,7 +39,7 @@ function BlendNode({ id, data }: NodeProps) {
           <label className="node-label">Mode</label>
           <select
             value={blendMode}
-            onChange={handleModeChange}
+            onChange={(e) => handleChange("blendMode", e.target.value)}
             className="node-select"
           >
             {BLEND_MODES.map((m) => (
@@ -58,7 +56,7 @@ function BlendNode({ id, data }: NodeProps) {
             min={0}
             max={100}
             value={opacity}
-            onChange={handleOpacityChange}
+            onChange={(e) => handleChange("opacity", Number(e.target.value))}
             className="node-slider"
           />
         </div>
