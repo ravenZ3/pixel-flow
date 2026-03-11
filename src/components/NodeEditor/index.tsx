@@ -13,7 +13,7 @@ import "reactflow/dist/style.css";
 
 import usePipelineStore from "@/store/pipelineStore";
 import ImageInputNode from "./nodes/ImageInputNode";
-import PreviewNode from "./nodes/PreviewNode";
+import OutputNode from "./nodes/OutputNode";
 import ColorNode from "./nodes/ColorNode";
 import FilterNode from "./nodes/FilterNode";
 import MaskNode from "./nodes/MaskNode";
@@ -25,7 +25,7 @@ const nodeTypes = {
   Filter: FilterNode,
   Mask: MaskNode,
   Blend: BlendNode,
-  Preview: PreviewNode,
+  Output: OutputNode,
 };
 
 let nodeIdCounter = 0;
@@ -98,6 +98,7 @@ function NodeEditorInner() {
         onNodesDelete={onNodesDelete}
         onEdgesDelete={onEdgesDelete}
         nodeTypes={nodeTypes}
+        onPaneContextMenu={(e) => e.preventDefault()}
         fitView
         deleteKeyCode="Backspace"
         className="bg-[#0f0f0f]"

@@ -189,13 +189,15 @@ const nodeRegistry: Record<string, NodeExecutor> = {
     execute: async (inputs, nodeData) => {
       return {
         image: inputs.image ?? null,
-        mask: nodeData?.maskBitmap ?? null,
+        mask: nodeData?.mask ?? null,
+        inputImage: inputs.image ?? null,
       };
     },
   },
-  Preview: {
+  Output: {
     execute: async (inputs) => ({
       image: inputs.image ?? null,
+      mask: inputs.mask ?? null,
     }),
   },
 };

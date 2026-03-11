@@ -8,7 +8,7 @@ const nodeItems = [
   { type: "Filter", label: "Filter" },
   { type: "Mask", label: "Mask" },
   { type: "Blend", label: "Blend" },
-  { type: "Preview", label: "Preview" },
+  { type: "Output", label: "Output" },
 ];
 
 export default function Sidebar() {

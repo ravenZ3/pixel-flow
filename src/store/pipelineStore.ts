@@ -17,7 +17,9 @@ interface PipelineStore {
   edges: Edge[];
   nodeOutputs: Record<string, Record<string, ImageBitmap | string | null>>;
   executionTime: number | null;
+  activePreviewNodeId: string | null;
   showMask: boolean;
+  maskOverlayOpacity: number;
   setNodes: (nodes: Node[]) => void;
   setEdges: (edges: Edge[]) => void;
   onNodesChange: OnNodesChange;
@@ -27,7 +29,9 @@ interface PipelineStore {
   updateNodeData: (nodeId: string, data: Record<string, unknown>) => void;
   setNodeOutput: (nodeId: string, outputs: Record<string, ImageBitmap | string | null>) => void;
   setExecutionTime: (ms: number) => void;
+  setActivePreviewNodeId: (id: string | null) => void;
   setShowMask: (show: boolean) => void;
+  setMaskOverlayOpacity: (opacity: number) => void;
   executePipeline: () => Promise<void>;
 }
 
@@ -36,7 +40,9 @@ const usePipelineStore = create<PipelineStore>((set, get) => ({
   edges: [],
   nodeOutputs: {},
   executionTime: null,
+  activePreviewNodeId: null,
   showMask: false,
+  maskOverlayOpacity: 0.5,
 
   setNodes: (nodes) => set({ nodes }),
   setEdges: (edges) => set({ edges }),
@@ -47,6 +53,8 @@ const usePipelineStore = create<PipelineStore>((set, get) => ({
 
   onEdgesChange: (changes) => {
     set({ edges: applyEdgeChanges(changes, get().edges) });
+    // Execute on edge change
+    setTimeout(() => get().executePipeline(), 0);
   },
 
   onConnect: (connection: Connection) => {
@@ -60,11 +68,11 @@ const usePipelineStore = create<PipelineStore>((set, get) => ({
   },
 
   updateNodeData: (nodeId, data) => {
-    set({
-      nodes: get().nodes.map((n) =>
+    set((state) => ({
+      nodes: state.nodes.map((n) =>
         n.id === nodeId ? { ...n, data: { ...n.data, ...data } } : n
       ),
-    });
+    }));
     // Auto-execute on data change
     setTimeout(() => get().executePipeline(), 0);
   },
@@ -76,10 +84,12 @@ const usePipelineStore = create<PipelineStore>((set, get) => ({
   },
 
   setExecutionTime: (executionTime) => set({ executionTime }),
+  setActivePreviewNodeId: (activePreviewNodeId) => set({ activePreviewNodeId }),
   setShowMask: (showMask) => set({ showMask }),
+  setMaskOverlayOpacity: (maskOverlayOpacity) => set({ maskOverlayOpacity }),
 
   executePipeline: async () => {
-    const { nodes, edges } = get();
+    const { nodes, edges, activePreviewNodeId, showMask } = get();
     const getNodeData = (id: string) => {
       const node = nodes.find((n) => n.id === id);
       return (node?.data as Record<string, unknown>) ?? {};
@@ -89,7 +99,32 @@ const usePipelineStore = create<PipelineStore>((set, get) => ({
       const start = performance.now();
       const outputs = await executePipeline(nodes, edges, getNodeData);
       const elapsed = performance.now() - start;
-      set({ nodeOutputs: outputs, executionTime: elapsed });
+
+      // Auto-select an output node if none active or current one is gone
+      const outputNodes = nodes.filter((n) => n.type === "Output");
+      let nextActiveId = activePreviewNodeId;
+      if (!outputNodes.find((n) => n.id === activePreviewNodeId)) {
+        nextActiveId = outputNodes.length > 0 ? outputNodes[0].id : null;
+      }
+
+      // Auto-toggle showMask based on connectivity of the active output node
+      let nextShowMask = showMask;
+      const activeOutputNode = nodes.find(n => n.id === nextActiveId);
+      if (activeOutputNode) {
+        const maskEdge = edges.find(
+          e => e.target === activeOutputNode.id && e.targetHandle === 'mask'
+        );
+        const hasMask = !!maskEdge;
+        if (hasMask && !showMask) nextShowMask = true;
+        if (!hasMask && showMask) nextShowMask = false;
+      }
+
+      set({ 
+        nodeOutputs: outputs, 
+        executionTime: elapsed, 
+        activePreviewNodeId: nextActiveId,
+        showMask: nextShowMask
+      });
     } catch (err) {
       console.error("Pipeline execution failed:", err);
     }

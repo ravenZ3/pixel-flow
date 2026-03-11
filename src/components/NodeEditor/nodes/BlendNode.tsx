@@ -1,82 +1,96 @@
 import { memo, useCallback } from "react";
 import { Handle, Position, NodeProps, useReactFlow } from "reactflow";
 import usePipelineStore from "@/store/pipelineStore";
-
-const BLEND_MODES = [
-  "normal",
-  "multiply",
-  "screen",
-  "overlay",
-  "difference",
-  "subtract",
-];
+import { Slider } from "@/components/ui/slider";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 function BlendNode({ id, data }: NodeProps) {
-  const { setNodes } = useReactFlow();
-  const executePipeline = usePipelineStore((s) => s.executePipeline);
+  const { setNodes, setEdges } = useReactFlow();
+  const updateNodeData = usePipelineStore((s) => s.updateNodeData);
 
-  const opacity = data.opacity ?? 50;
-  const blendMode = data.blendMode ?? "normal";
+  const mode = data.mode ?? "normal";
+  const opacity = data.opacity ?? 1.0;
 
   const handleChange = useCallback(
     (key: string, value: string | number) => {
-      setNodes((nodes) =>
-        nodes.map((n) =>
-          n.id === id ? { ...n, data: { ...n.data, [key]: value } } : n
-        )
-      );
-      // trigger pipeline after state update
-      setTimeout(() => executePipeline(), 0);
+      updateNodeData(id, { [key]: value });
     },
-    [id, setNodes, executePipeline]
+    [id, updateNodeData]
   );
 
+  const deleteNode = useCallback(() => {
+    setNodes((nds) => nds.filter((n) => n.id !== id));
+    setEdges((eds) => eds.filter((e) => e.source !== id && e.target !== id));
+  }, [id, setNodes, setEdges]);
+
   return (
-    <div className="node-surface">
+    <div className="node-surface relative group">
+      <button
+        onClick={deleteNode}
+        className="absolute top-1 right-1 w-4 h-4 flex items-center justify-center
+                   text-zinc-600 hover:text-red-400 text-xs rounded
+                   opacity-0 group-hover:opacity-100 transition-opacity z-10"
+      >
+        ×
+      </button>
       <div className="node-header">Blend</div>
-      <div className="node-body">
+      <div className="node-body space-y-4">
         <div className="node-control">
-          <label className="node-label">Mode</label>
-          <select
-            value={blendMode}
-            onChange={(e) => handleChange("blendMode", e.target.value)}
-            className="node-select"
+          <label className="node-label">Blend Mode</label>
+          <Select
+            value={mode}
+            onValueChange={(val) => handleChange("mode", val)}
           >
-            {BLEND_MODES.map((m) => (
-              <option key={m} value={m}>
-                {m.charAt(0).toUpperCase() + m.slice(1)}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger className="w-full bg-zinc-950 border-zinc-800 text-xs text-zinc-200">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="bg-zinc-900 border-zinc-800 text-zinc-200">
+              <SelectItem value="normal">Normal</SelectItem>
+              <SelectItem value="multiply">Multiply</SelectItem>
+              <SelectItem value="screen">Screen</SelectItem>
+              <SelectItem value="overlay">Overlay</SelectItem>
+              <SelectItem value="darken">Darken</SelectItem>
+              <SelectItem value="lighten">Lighten</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
         <div className="node-control">
-          <label className="node-label">Opacity: {opacity}%</label>
-          <input
-            type="range"
+          <label className="node-label">Opacity: {(opacity * 100).toFixed(0)}%</label>
+          <Slider
+            value={[opacity]}
             min={0}
-            max={100}
-            value={opacity}
-            onChange={(e) => handleChange("opacity", Number(e.target.value))}
-            className="node-slider"
+            max={1}
+            step={0.01}
+            onValueChange={(val) => handleChange("opacity", Array.isArray(val) ? val[0] : val)}
           />
         </div>
       </div>
-      <Handle
-        type="target"
-        position={Position.Left}
-        id="imageA"
-        className="handle-image"
-        style={{ top: "40%" }}
-      />
-      <div className="handle-label" style={{ position: "absolute", left: "-32px", top: "35%", fontSize: "9px", color: "#555" }}>A</div>
-      <Handle
-        type="target"
-        position={Position.Left}
-        id="imageB"
-        className="handle-image"
-        style={{ top: "70%" }}
-      />
-      <div className="handle-label" style={{ position: "absolute", left: "-32px", top: "65%", fontSize: "9px", color: "#555" }}>B</div>
+      <div className="flex flex-col gap-2 mt-2">
+        <div className="flex items-center justify-between relative h-6">
+          <Handle
+            type="target"
+            position={Position.Left}
+            id="base"
+            className="handle-image !left-[-12px]"
+          />
+          <span className="text-[10px] text-zinc-500 ml-2">Base</span>
+        </div>
+        <div className="flex items-center justify-between relative h-6">
+          <Handle
+            type="target"
+            position={Position.Left}
+            id="blend"
+            className="handle-image !left-[-12px]"
+          />
+          <span className="text-[10px] text-zinc-500 ml-2">Blend</span>
+        </div>
+      </div>
       <Handle
         type="source"
         position={Position.Right}
