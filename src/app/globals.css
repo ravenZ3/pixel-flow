@@ -1,0 +1,353 @@
+@import "tailwindcss";
+
+/* ===== BASE ===== */
+:root {
+  --bg: #0f0f0f;
+  --surface: #1c1c1c;
+  --border: #2e2e2e;
+  --accent: #00d4ff;
+  --accent-glow: rgba(0, 212, 255, 0.15);
+  --mask-color: #ff8c00;
+  --text-color: #e0e0e0;
+  --text-dim: #888;
+  --text-muted: #555;
+  --font-mono: var(--font-mono), "JetBrains Mono", "IBM Plex Mono", monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text-color);
+  font-family: var(--font-mono);
+  overflow: hidden;
+}
+
+/* ===== APP SHELL ===== */
+.app-shell {
+  display: flex;
+  height: 100vh;
+  width: 100vw;
+}
+
+.editor-panel {
+  flex: 1;
+  height: 100%;
+  position: relative;
+  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+}
+
+/* ===== SIDEBAR ===== */
+.sidebar {
+  width: 180px;
+  min-width: 180px;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+}
+
+.sidebar-title {
+  padding: 16px 16px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.sidebar-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px 8px;
+}
+
+.sidebar-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  font-size: 12px;
+  color: var(--text-color);
+  cursor: grab;
+  border-radius: 2px;
+  transition: background 0.15s, color 0.15s;
+  user-select: none;
+}
+
+.sidebar-item:hover {
+  background: rgba(0, 212, 255, 0.08);
+  color: var(--accent);
+}
+
+.sidebar-item:active {
+  cursor: grabbing;
+}
+
+.sidebar-item-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex-shrink: 0;
+}
+
+/* ===== PREVIEW PANEL ===== */
+.preview-panel {
+  width: 320px;
+  min-width: 320px;
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+}
+
+.preview-title {
+  padding: 16px 16px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.preview-container {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  overflow: hidden;
+}
+
+.preview-image-wrapper {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.preview-image {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border: 1px solid var(--border);
+}
+
+.preview-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  color: var(--text-muted);
+}
+
+.preview-placeholder-icon {
+  opacity: 0.3;
+}
+
+.preview-placeholder-text {
+  font-size: 12px;
+  letter-spacing: 0.05em;
+}
+
+/* ===== NODE STYLES ===== */
+.node-surface {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  min-width: 160px;
+  font-family: var(--font-mono);
+}
+
+.node-header {
+  padding: 6px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-color);
+  border-bottom: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.node-body {
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.node-label {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.node-btn {
+  padding: 5px 10px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  background: rgba(0, 212, 255, 0.1);
+  color: var(--accent);
+  border: 1px solid rgba(0, 212, 255, 0.25);
+  cursor: pointer;
+  transition: all 0.15s;
+  text-align: center;
+}
+
+.node-btn:hover {
+  background: rgba(0, 212, 255, 0.2);
+  border-color: var(--accent);
+}
+
+.node-btn-disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  color: var(--text-dim);
+  background: rgba(255, 255, 255, 0.03);
+  border-color: var(--border);
+}
+
+.node-btn-disabled:hover {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: var(--border);
+}
+
+.node-thumbnail {
+  width: 100%;
+  max-height: 80px;
+  object-fit: contain;
+  border: 1px solid var(--border);
+  margin-top: 4px;
+}
+
+.node-placeholder {
+  width: 100%;
+  height: 60px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.node-slider {
+  width: 100%;
+  height: 4px;
+  appearance: none;
+  background: var(--border);
+  outline: none;
+  cursor: pointer;
+}
+
+.node-slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  background: var(--accent);
+  border-radius: 0;
+  cursor: pointer;
+}
+
+.node-slider::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  background: var(--accent);
+  border: none;
+  border-radius: 0;
+  cursor: pointer;
+}
+
+/* ===== REACT FLOW HANDLES ===== */
+.handle-image {
+  width: 8px !important;
+  height: 8px !important;
+  background: var(--accent) !important;
+  border: none !important;
+  border-radius: 50% !important;
+}
+
+.handle-mask {
+  width: 8px !important;
+  height: 8px !important;
+  background: var(--mask-color) !important;
+  border: none !important;
+  border-radius: 50% !important;
+}
+
+/* ===== REACT FLOW OVERRIDES ===== */
+.react-flow__node {
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+.react-flow__node.selected .node-surface {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 1px var(--accent), 0 0 12px var(--accent-glow);
+}
+
+.react-flow__edge-path {
+  stroke: var(--border) !important;
+  stroke-width: 2 !important;
+}
+
+.react-flow__edge.selected .react-flow__edge-path {
+  stroke: var(--accent) !important;
+}
+
+.react-flow__connection-line {
+  stroke: var(--accent) !important;
+  stroke-width: 2 !important;
+}
+
+.react-flow__controls {
+  background: var(--surface) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+.react-flow__controls-button {
+  background: var(--surface) !important;
+  border: none !important;
+  border-bottom: 1px solid var(--border) !important;
+  fill: var(--text-dim) !important;
+}
+
+.react-flow__controls-button:hover {
+  background: rgba(0, 212, 255, 0.1) !important;
+  fill: var(--accent) !important;
+}
+
+.react-flow__minimap {
+  background: var(--surface) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 0 !important;
+}
+
+.react-flow__attribution {
+  display: none !important;
+}
+
+/* ===== SCROLLBAR ===== */
+::-webkit-scrollbar {
+  width: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+}
