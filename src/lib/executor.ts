@@ -5,10 +5,13 @@ export async function executePipeline(
   nodes: Node[],
   edges: Edge[],
   getNodeData: (id: string) => Record<string, unknown>
-): Promise<Record<string, Record<string, string | null>>> {
+): Promise<Record<string, Record<string, ImageBitmap | string | null>>> {
   // Build adjacency list and in-degree map
   const inDegree = new Map<string, number>();
-  const adjacency = new Map<string, { targetId: string; sourceHandle: string | null; targetHandle: string | null }[]>();
+  const adjacency = new Map<
+    string,
+    { targetId: string; sourceHandle: string | null; targetHandle: string | null }[]
+  >();
 
   for (const node of nodes) {
     inDegree.set(node.id, 0);
@@ -42,7 +45,9 @@ export async function executePipeline(
   }
 
   // Execute each node in topological order
-  const allOutputs: Record<string, Record<string, string | null>> = {};
+  const allOutputs: Record<string, Record<string, ImageBitmap | string | null>> = {};
+
+  const pipelineStart = performance.now();
 
   for (const nodeId of sorted) {
     const node = nodes.find((n) => n.id === nodeId);
@@ -52,12 +57,12 @@ export async function executePipeline(
     if (!executor) continue;
 
     // Gather inputs from upstream edges
-    const inputs: Record<string, string | null> = {};
+    const inputs: Record<string, ImageBitmap | string | null> = {};
     const nodeData = getNodeData(nodeId);
 
-    // Include node's own data (e.g., uploaded image)
+    // Include node's own data
     for (const [key, value] of Object.entries(nodeData)) {
-      inputs[key] = typeof value === "string" ? value : null;
+      inputs[key] = (value as ImageBitmap | string | null) ?? null;
     }
 
     // Overlay inputs from connected upstream nodes
@@ -72,9 +77,12 @@ export async function executePipeline(
       }
     }
 
-    const outputs = await executor.execute(inputs);
+    const outputs = await executor.execute(inputs, nodeData);
     allOutputs[nodeId] = outputs;
   }
+
+  const elapsed = performance.now() - pipelineStart;
+  console.log(`[Pipeline] Executed ${nodes.length} nodes in ${elapsed.toFixed(2)}ms`);
 
   return allOutputs;
 }

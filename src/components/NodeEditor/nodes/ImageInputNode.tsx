@@ -1,29 +1,42 @@
 "use client";
 
-import { memo, useCallback, useRef } from "react";
+import { memo, useCallback, useRef, useState, useEffect } from "react";
 import { Handle, Position, NodeProps } from "reactflow";
 import usePipelineStore from "@/store/pipelineStore";
 
 function ImageInputNode({ id, data }: NodeProps) {
   const updateNodeData = usePipelineStore((s) => s.updateNodeData);
   const fileRef = useRef<HTMLInputElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
 
   const handleUpload = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (!file) return;
 
-      const reader = new FileReader();
-      reader.onload = () => {
-        const base64 = reader.result as string;
-        updateNodeData(id, { uploadedImage: base64 });
-      };
-      reader.readAsDataURL(file);
+      try {
+        const bitmap = await createImageBitmap(file);
+        updateNodeData(id, { uploadedImage: bitmap });
+      } catch (err) {
+        console.error("Failed to create ImageBitmap:", err);
+      }
     },
     [id, updateNodeData]
   );
 
-  const uploadedImage = data.uploadedImage as string | undefined;
+  const uploadedImage = data.uploadedImage as ImageBitmap | undefined;
+
+  useEffect(() => {
+    if (uploadedImage && canvasRef.current) {
+      const canvas = canvasRef.current;
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        canvas.width = 160;
+        canvas.height = (uploadedImage.height / uploadedImage.width) * 160;
+        ctx.drawImage(uploadedImage, 0, 0, canvas.width, canvas.height);
+      }
+    }
+  }, [uploadedImage]);
 
   return (
     <div className="node-surface">
@@ -37,18 +50,11 @@ function ImageInputNode({ id, data }: NodeProps) {
           className="hidden"
           id={`file-upload-${id}`}
         />
-        <button
-          className="node-btn"
-          onClick={() => fileRef.current?.click()}
-        >
+        <button className="node-btn" onClick={() => fileRef.current?.click()}>
           Upload Image
         </button>
         {uploadedImage && (
-          <img
-            src={uploadedImage}
-            alt="Uploaded preview"
-            className="node-thumbnail"
-          />
+          <canvas ref={canvasRef} className="node-thumbnail-canvas" />
         )}
       </div>
       <Handle

@@ -15,7 +15,9 @@ import { executePipeline } from "@/lib/executor";
 interface PipelineStore {
   nodes: Node[];
   edges: Edge[];
-  nodeOutputs: Record<string, Record<string, string | null>>;
+  nodeOutputs: Record<string, Record<string, ImageBitmap | string | null>>;
+  executionTime: number | null;
+  showMask: boolean;
   setNodes: (nodes: Node[]) => void;
   setEdges: (edges: Edge[]) => void;
   onNodesChange: OnNodesChange;
@@ -23,7 +25,9 @@ interface PipelineStore {
   onConnect: OnConnect;
   addNode: (node: Node) => void;
   updateNodeData: (nodeId: string, data: Record<string, unknown>) => void;
-  setNodeOutput: (nodeId: string, outputs: Record<string, string | null>) => void;
+  setNodeOutput: (nodeId: string, outputs: Record<string, ImageBitmap | string | null>) => void;
+  setExecutionTime: (ms: number) => void;
+  setShowMask: (show: boolean) => void;
   executePipeline: () => Promise<void>;
 }
 
@@ -31,6 +35,8 @@ const usePipelineStore = create<PipelineStore>((set, get) => ({
   nodes: [],
   edges: [],
   nodeOutputs: {},
+  executionTime: null,
+  showMask: false,
 
   setNodes: (nodes) => set({ nodes }),
   setEdges: (edges) => set({ edges }),
@@ -69,6 +75,9 @@ const usePipelineStore = create<PipelineStore>((set, get) => ({
     });
   },
 
+  setExecutionTime: (executionTime) => set({ executionTime }),
+  setShowMask: (showMask) => set({ showMask }),
+
   executePipeline: async () => {
     const { nodes, edges } = get();
     const getNodeData = (id: string) => {
@@ -77,8 +86,10 @@ const usePipelineStore = create<PipelineStore>((set, get) => ({
     };
 
     try {
+      const start = performance.now();
       const outputs = await executePipeline(nodes, edges, getNodeData);
-      set({ nodeOutputs: outputs });
+      const elapsed = performance.now() - start;
+      set({ nodeOutputs: outputs, executionTime: elapsed });
     } catch (err) {
       console.error("Pipeline execution failed:", err);
     }
