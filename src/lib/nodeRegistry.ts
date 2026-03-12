@@ -9,14 +9,15 @@ export interface NodeExecutor {
 
 const nodeRegistry: Record<string, NodeExecutor> = {
   ImageInput: {
-    execute: async (inputs) => ({
-      image: (inputs.uploadedImage as unknown as ImageBitmap) ?? null,
+    execute: async (inputs, nodeData) => ({
+      'image:output': (nodeData?.uploadedImage as unknown as ImageBitmap) ?? null,
     }),
   },
   Color: {
     execute: async (inputs, nodeData) => {
-      if (!inputs.image || !(inputs.image instanceof ImageBitmap)) return { image: null };
-      const src = inputs.image;
+      const src = inputs['image:input'];
+      if (!(src instanceof ImageBitmap)) return { 'image:output': null };
+
       const canvas = new OffscreenCanvas(src.width, src.height);
       const ctx = canvas.getContext("2d") as OffscreenCanvasRenderingContext2D;
       ctx.drawImage(src, 0, 0);
@@ -34,22 +35,18 @@ const nodeRegistry: Record<string, NodeExecutor> = {
         let g = data[i + 1] / 255;
         let b = data[i + 2] / 255;
 
-        // brightness
         r += brightness;
         g += brightness;
         b += brightness;
 
-        // contrast
         r = (r - 0.5) * (1 + contrast) + 0.5;
         g = (g - 0.5) * (1 + contrast) + 0.5;
         b = (b - 0.5) * (1 + contrast) + 0.5;
 
-        // gamma
         r = Math.pow(Math.max(0, r), 1 / gamma);
         g = Math.pow(Math.max(0, g), 1 / gamma);
         b = Math.pow(Math.max(0, b), 1 / gamma);
 
-        // saturation + hue via HSL
         const [h, s, l] = rgbToHsl(r, g, b);
         const newS = Math.min(1, Math.max(0, s + saturation));
         const newH = (h + hue + 1) % 1;
@@ -61,13 +58,14 @@ const nodeRegistry: Record<string, NodeExecutor> = {
       }
 
       ctx.putImageData(id, 0, 0);
-      return { image: canvas.transferToImageBitmap() };
+      return { 'image:output': canvas.transferToImageBitmap() };
     },
   },
   Filter: {
     execute: async (inputs, nodeData) => {
-      if (!inputs.image || !(inputs.image instanceof ImageBitmap)) return { image: null };
-      const src = inputs.image;
+      const src = inputs['image:input'];
+      if (!(src instanceof ImageBitmap)) return { 'image:output': null };
+
       const type = nodeData?.filterType ?? "gaussian";
       const strength = nodeData?.strength ?? 1;
 
@@ -77,7 +75,7 @@ const nodeRegistry: Record<string, NodeExecutor> = {
       if (type === "gaussian") {
         ctx.filter = `blur(${strength}px)`;
         ctx.drawImage(src, 0, 0);
-        return { image: canvas.transferToImageBitmap() };
+        return { 'image:output': canvas.transferToImageBitmap() };
       }
 
       ctx.drawImage(src, 0, 0);
@@ -122,22 +120,20 @@ const nodeRegistry: Record<string, NodeExecutor> = {
       }
 
       ctx.putImageData(id, 0, 0);
-      return { image: canvas.transferToImageBitmap() };
+      return { 'image:output': canvas.transferToImageBitmap() };
     },
   },
   Blend: {
     execute: async (inputs, nodeData) => {
-      if (!inputs.imageA || !(inputs.imageA instanceof ImageBitmap)) {
-        return { image: inputs.imageB instanceof ImageBitmap ? inputs.imageB : null };
-      }
-      if (!inputs.imageB || !(inputs.imageB instanceof ImageBitmap)) {
-        return { image: inputs.imageA instanceof ImageBitmap ? inputs.imageA : null };
-      }
+      const a = inputs['imageA:input'];
+      const b = inputs['imageB:input'];
 
-      const a = inputs.imageA;
-      const b = inputs.imageB;
-      const opacity = (nodeData?.opacity ?? 50) / 100;
-      const mode = nodeData?.blendMode ?? "normal";
+      if (!(a instanceof ImageBitmap) && !(b instanceof ImageBitmap)) return { 'image:output': null };
+      if (!(a instanceof ImageBitmap)) return { 'image:output': b instanceof ImageBitmap ? b : null };
+      if (!(b instanceof ImageBitmap)) return { 'image:output': a };
+
+      const opacity = (nodeData?.opacity ?? 1.0);
+      const mode = nodeData?.mode ?? "normal";
 
       const canvas = new OffscreenCanvas(a.width, a.height);
       const ctx = canvas.getContext("2d") as OffscreenCanvasRenderingContext2D;
@@ -167,11 +163,11 @@ const nodeRegistry: Record<string, NodeExecutor> = {
             case "overlay":
               blended = av < 0.5 ? 2 * av * bv : 1 - 2 * (1 - av) * (1 - bv);
               break;
-            case "difference":
-              blended = Math.abs(av - bv);
+            case "darken":
+              blended = Math.min(av, bv);
               break;
-            case "subtract":
-              blended = Math.max(0, av - bv);
+            case "lighten":
+              blended = Math.max(av, bv);
               break;
             default:
               blended = bv;
@@ -182,23 +178,30 @@ const nodeRegistry: Record<string, NodeExecutor> = {
       }
 
       ctx.putImageData(idA, 0, 0);
-      return { image: canvas.transferToImageBitmap() };
+      return { 'image:output': canvas.transferToImageBitmap() };
     },
   },
   Mask: {
     execute: async (inputs, nodeData) => {
+      const src = inputs['image:input']
+      if (!(src instanceof ImageBitmap)) return { 'image:output': null, 'mask:output': null, 'inputImage': null }
+      
       return {
-        image: inputs.image ?? null,
-        mask: nodeData?.mask ?? null,
-        inputImage: inputs.image ?? null,
+        'image:output': src,
+        'mask:output': nodeData?.mask ?? null,
+        'inputImage': src, // For drawing background reference in UI
       };
     },
   },
   Output: {
-    execute: async (inputs) => ({
-      image: inputs.image ?? null,
-      mask: inputs.mask ?? null,
-    }),
+    execute: async (inputs) => {
+      const image = inputs['image:input']
+      const mask  = inputs['mask:input']
+      return {
+        'image:output': image instanceof ImageBitmap ? image : null,
+        'mask:output':  mask  instanceof ImageBitmap ? mask  : null,
+      }
+    },
   },
 };
 

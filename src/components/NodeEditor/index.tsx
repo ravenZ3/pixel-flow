@@ -8,6 +8,7 @@ import ReactFlow, {
   BackgroundVariant,
   ReactFlowProvider,
   ReactFlowInstance,
+  Connection,
 } from "reactflow";
 import "reactflow/dist/style.css";
 
@@ -84,6 +85,16 @@ function NodeEditorInner() {
     setTimeout(() => executePipeline(), 0);
   }, [executePipeline]);
 
+  const isValidConnection = useCallback((connection: Connection) => {
+    const sourceType = connection.sourceHandle?.split(':')[0] ?? '';
+    const targetType = connection.targetHandle?.split(':')[0] ?? '';
+
+    // normalize imageA and imageB to image for matching
+    const normalize = (t: string) => t.startsWith('image') ? 'image' : t;
+
+    return normalize(sourceType) === normalize(targetType);
+  }, []);
+
   return (
     <div ref={reactFlowWrapper} className="h-full w-full">
       <ReactFlow
@@ -97,6 +108,7 @@ function NodeEditorInner() {
         onDragOver={onDragOver}
         onNodesDelete={onNodesDelete}
         onEdgesDelete={onEdgesDelete}
+        isValidConnection={isValidConnection}
         nodeTypes={nodeTypes}
         onPaneContextMenu={(e) => e.preventDefault()}
         fitView
@@ -113,7 +125,6 @@ function NodeEditorInner() {
           variant={BackgroundVariant.Dots}
           gap={20}
           size={1}
-          color="#1a1a1a"
         />
       </ReactFlow>
     </div>

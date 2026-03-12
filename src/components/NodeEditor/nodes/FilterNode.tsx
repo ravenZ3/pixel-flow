@@ -1,5 +1,5 @@
-import { memo, useCallback } from "react";
-import { Handle, Position, NodeProps, useReactFlow } from "reactflow";
+import { memo, useCallback, useEffect, useRef } from "react";
+import { Handle, Position, NodeProps } from "reactflow";
 import usePipelineStore from "@/store/pipelineStore";
 import { Slider } from "@/components/ui/slider";
 import {
@@ -9,9 +9,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import NodeWrapper from "./NodeWrapper";
+import { handleRow } from "./handleStyles";
 
-function FilterNode({ id, data }: NodeProps) {
-  const { setNodes, setEdges } = useReactFlow();
+function FilterNode({ id, data, selected }: NodeProps) {
   const updateNodeData = usePipelineStore((s) => s.updateNodeData);
 
   const filterType = data.filterType ?? "gaussian";
@@ -24,23 +25,37 @@ function FilterNode({ id, data }: NodeProps) {
     [id, updateNodeData]
   );
 
-  const deleteNode = useCallback(() => {
-    setNodes((nds) => nds.filter((n) => n.id !== id));
-    setEdges((eds) => eds.filter((e) => e.source !== id && e.target !== id));
-  }, [id, setNodes, setEdges]);
+  const nodeOutputs = usePipelineStore((s) => s.nodeOutputs);
+  const outputImage = nodeOutputs[id]?.["image:output"] as ImageBitmap | undefined;
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    if (outputImage && canvasRef.current) {
+      const canvas = canvasRef.current;
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        const thumbWidth = 160;
+        canvas.width = thumbWidth;
+        canvas.height = (outputImage.height / outputImage.width) * thumbWidth;
+        ctx.drawImage(outputImage, 0, 0, canvas.width, canvas.height);
+      }
+    }
+  }, [outputImage]);
+
+  const leftRow = handleRow({ side: 'left' });
+  const rightRow = handleRow({ side: 'right' });
 
   return (
-    <div className="node-surface relative group">
-      <button
-        onClick={deleteNode}
-        className="absolute top-1 right-1 w-4 h-4 flex items-center justify-center
-                   text-zinc-600 hover:text-red-400 text-xs rounded
-                   opacity-0 group-hover:opacity-100 transition-opacity z-10"
-      >
-        ×
-      </button>
-      <div className="node-header">Filter</div>
-      <div className="node-body space-y-4">
+    <NodeWrapper id={id} label="Filter" selected={selected}>
+      {outputImage && (
+        <div className="mb-4">
+          <canvas
+            ref={canvasRef}
+            className="node-thumbnail-canvas w-full h-full object-contain block"
+          />
+        </div>
+      )}
+      <div className="space-y-4 nodrag nopan">
         <div className="node-control">
           <label className="node-label">Filter Type</label>
           <Select
@@ -69,19 +84,28 @@ function FilterNode({ id, data }: NodeProps) {
           />
         </div>
       </div>
-      <Handle
-        type="target"
-        position={Position.Left}
-        id="image"
-        className="handle-image"
-      />
-      <Handle
-        type="source"
-        position={Position.Right}
-        id="image"
-        className="handle-image"
-      />
-    </div>
+
+      <div className="mt-4 space-y-2">
+        <div className={leftRow.row()}>
+          <Handle
+            type="target"
+            position={Position.Left}
+            id="image:input"
+            className="!left-[-20px]"
+          />
+          <span className={leftRow.label()}>image</span>
+        </div>
+        <div className={rightRow.row()}>
+          <span className={rightRow.label()}>image</span>
+          <Handle
+            type="source"
+            position={Position.Right}
+            id="image:output"
+            className="!right-[-20px]"
+          />
+        </div>
+      </div>
+    </NodeWrapper>
   );
 }
 

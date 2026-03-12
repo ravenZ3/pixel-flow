@@ -11,6 +11,7 @@
   --border: oklch(0.922 0 0);
   --accent: oklch(0.97 0 0);
   --accent-glow: rgba(0, 212, 255, 0.15);
+  --color-cyberpink: #ff0056;
   --mask-color: #ff8c00;
   --text-color: #e0e0e0;
   --text-dim: #888;
@@ -59,7 +60,7 @@ body {
   height: 100%;
   background: var(--bg);
   color: var(--text-color);
-  font-family: var(--font-mono);
+  /* font-family: var(--font-mono); */
   overflow: hidden;
 }
 
@@ -319,9 +320,10 @@ body {
   padding: 5px 10px;
   font-size: 11px;
   font-family: var(--font-mono);
-  background: rgba(0, 212, 255, 0.1);
-  color: var(--accent);
+  background: rgba(30, 4, 20, 0.7) !important;
+  color: var(--color-cyberpink);
   border: 1px solid rgba(0, 212, 255, 0.25);
+  border-radius: 12px;
   cursor: pointer;
   transition: all 0.15s;
   text-align: center;
@@ -394,19 +396,42 @@ body {
 
 /* ===== REACT FLOW HANDLES ===== */
 .handle-image {
-  width: 8px !important;
-  height: 8px !important;
+  width: 10px !important;
+  height: 10px !important;
   background: var(--accent) !important;
-  border: none !important;
+  border: 2px solid var(--surface) !important;
   border-radius: 50% !important;
+  transition: transform 0.15s ease, background 0.15s ease;
+  z-index: 50;
+}
+
+.handle-image:hover {
+  transform: scale(1.2);
+  background: oklch(0.97 0 0) !important;
+}
+
+.react-flow__handle-left.handle-image,
+.react-flow__handle-left.handle-mask {
+  left: -5px !important;
+}
+
+.react-flow__handle-right.handle-image,
+.react-flow__handle-right.handle-mask {
+  right: -5px !important;
 }
 
 .handle-mask {
-  width: 8px !important;
-  height: 8px !important;
+  width: 10px !important;
+  height: 10px !important;
   background: var(--mask-color) !important;
-  border: none !important;
+  border: 2px solid var(--surface) !important;
   border-radius: 50% !important;
+  transition: transform 0.15s ease;
+  z-index: 50;
+}
+
+.handle-mask:hover {
+  transform: scale(1.2);
 }
 
 /* ===== REACT FLOW OVERRIDES ===== */
@@ -543,6 +568,7 @@ body {
   --color-card: var(--card);
   --color-foreground: var(--foreground);
   --color-background: var(--background);
+  --color-cyberpink: var(--color-cyberpink);
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -556,9 +582,11 @@ body {
   * {
     @apply border-border outline-ring/50;
   }
+
   body {
     @apply bg-background text-foreground;
   }
+
   html {
     @apply font-sans;
   }

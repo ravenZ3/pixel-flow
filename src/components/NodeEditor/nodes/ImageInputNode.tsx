@@ -1,11 +1,13 @@
 "use client";
 
-import { memo, useCallback, useRef, useState, useEffect } from "react";
-import { Handle, Position, NodeProps, useReactFlow } from "reactflow";
+import { memo, useCallback, useRef, useEffect } from "react";
+import { Handle, Position, NodeProps } from "reactflow";
 import usePipelineStore from "@/store/pipelineStore";
+import NodeWrapper from "./NodeWrapper";
 
-function ImageInputNode({ id, data }: NodeProps) {
-  const { setNodes, setEdges } = useReactFlow();
+import { handleRow } from "./handleStyles";
+
+function ImageInputNode({ id, data, selected }: NodeProps) {
   const updateNodeData = usePipelineStore((s) => s.updateNodeData);
   const fileRef = useRef<HTMLInputElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -25,11 +27,6 @@ function ImageInputNode({ id, data }: NodeProps) {
     [id, updateNodeData]
   );
 
-  const deleteNode = useCallback(() => {
-    setNodes((nds) => nds.filter((n) => n.id !== id));
-    setEdges((eds) => eds.filter((e) => e.source !== id && e.target !== id));
-  }, [id, setNodes, setEdges]);
-
   const uploadedImage = data.uploadedImage as ImageBitmap | undefined;
 
   useEffect(() => {
@@ -46,44 +43,43 @@ function ImageInputNode({ id, data }: NodeProps) {
     }
   }, [uploadedImage]);
 
+  const rightRow = handleRow({ side: "right" });
+
   return (
-    <div className="node-surface relative group">
-      <button
-        onClick={deleteNode}
-        className="absolute top-1 right-1 w-4 h-4 flex items-center justify-center
-                   text-zinc-600 hover:text-red-400 text-xs rounded
-                   opacity-0 group-hover:opacity-100 transition-opacity z-10"
-      >
-        ×
-      </button>
-      <div className="node-header">Image Input</div>
-      <div className="node-body">
-        <input
-          ref={fileRef}
-          type="file"
-          accept="image/*"
-          onChange={handleUpload}
-          className="hidden"
-          id={`file-upload-${id}`}
-        />
-        <button className="node-btn" onClick={() => fileRef.current?.click()}>
-          Upload Image
-        </button>
-        {uploadedImage && (
-          <canvas
-            ref={canvasRef}
-            className="node-thumbnail-canvas w-full h-full object-contain block"
-          />
-        )}
-      </div>
-      <Handle
-        type="source"
-        position={Position.Right}
-        id="image"
-        className="handle-image"
+    <NodeWrapper id={id} label="Image Input" selected={selected}>
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*"
+        onChange={handleUpload}
+        className="hidden"
+        id={`file-upload-${id}`}
       />
-    </div>
+      <button className="node-btn" onClick={() => fileRef.current?.click()}>
+        Upload Image
+      </button>
+      {uploadedImage && (
+        <canvas
+          ref={canvasRef}
+          className="node-thumbnail-canvas w-full h-full object-contain block mt-2"
+        />
+      )}
+      
+      <div className="mt-4">
+        <div className={rightRow.row()}>
+          <span className={rightRow.label()}>image</span>
+          <Handle
+            type="source"
+            position={Position.Right}
+            id="image:output"
+            className="!right-[-20px]"
+          />
+        </div>
+      </div>
+    </NodeWrapper>
   );
 }
 
+
 export default memo(ImageInputNode);
+

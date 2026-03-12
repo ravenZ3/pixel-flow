@@ -1,12 +1,12 @@
 import { memo, useCallback } from "react";
-import { Handle, Position, NodeProps, useReactFlow } from "reactflow";
+import { Handle, Position, NodeProps } from "reactflow";
 import usePipelineStore from "@/store/pipelineStore";
 import { Slider } from "@/components/ui/slider";
+import NodeWrapper from "./NodeWrapper";
+import { handleRow } from "./handleStyles";
 
-function ColorNode({ id, data }: NodeProps) {
-  const { setNodes, setEdges } = useReactFlow();
+function ColorNode({ id, data, selected }: NodeProps) {
   const updateNodeData = usePipelineStore((s) => s.updateNodeData);
-  const executePipeline = usePipelineStore((s) => s.executePipeline);
 
   const brightness = data.brightness ?? 0;
   const contrast = data.contrast ?? 0;
@@ -21,24 +21,13 @@ function ColorNode({ id, data }: NodeProps) {
     [id, updateNodeData]
   );
 
-  const deleteNode = useCallback(() => {
-    setNodes((nds) => nds.filter((n) => n.id !== id));
-    setEdges((eds) => eds.filter((e) => e.source !== id && e.target !== id));
-  }, [id, setNodes, setEdges]);
+  const leftRow = handleRow({ side: 'left' });
+  const rightRow = handleRow({ side: 'right' });
 
   return (
-    <div className="node-surface relative group">
-      <button
-        onClick={deleteNode}
-        className="absolute top-1 right-1 w-4 h-4 flex items-center justify-center
-                   text-zinc-600 hover:text-red-400 text-xs rounded
-                   opacity-0 group-hover:opacity-100 transition-opacity z-10"
-      >
-        ×
-      </button>
-      <div className="node-header">Color</div>
-      <div className="node-body space-y-4">
-        <div className="node-control">
+    <NodeWrapper id={id} label="Color" selected={selected}>
+      <div className="space-y-4 nopan nodrag">
+        <div className="node-control ">
           <label className="node-label">Brightness: {brightness}</label>
           <Slider
             value={[brightness]}
@@ -84,25 +73,36 @@ function ColorNode({ id, data }: NodeProps) {
             value={[gamma]}
             min={0.1}
             max={3.0}
-            step={0.1}
+            step={0.05}
             onValueChange={(val) => handleChange("gamma", Array.isArray(val) ? val[0] : val)}
           />
         </div>
       </div>
-      <Handle
-        type="target"
-        position={Position.Left}
-        id="image"
-        className="handle-image"
-      />
-      <Handle
-        type="source"
-        position={Position.Right}
-        id="image"
-        className="handle-image"
-      />
-    </div>
+
+      <div className="mt-4 space-y-2">
+        <div className={leftRow.row()}>
+          <Handle
+            type="target"
+            position={Position.Left}
+            id="image:input"
+            className="!left-[-20px]"
+          />
+          <span className={leftRow.label()}>image</span>
+        </div>
+        <div className={rightRow.row()}>
+          <span className={rightRow.label()}>image</span>
+          <Handle
+            type="source"
+            position={Position.Right}
+            id="image:output"
+            className="!right-[-20px]"
+          />
+        </div>
+      </div>
+    </NodeWrapper>
   );
 }
 
+
 export default memo(ColorNode);
+

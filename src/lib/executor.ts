@@ -69,10 +69,26 @@ export async function executePipeline(
     for (const edge of edges) {
       if (edge.target === nodeId) {
         const sourceOutputs = allOutputs[edge.source];
-        if (sourceOutputs) {
-          const sourceHandle = edge.sourceHandle ?? "image";
-          const targetHandle = edge.targetHandle ?? "image";
-          inputs[targetHandle] = sourceOutputs[sourceHandle] ?? null;
+        if (sourceOutputs && edge.sourceHandle && edge.targetHandle) {
+          // Precise match
+          let value = sourceOutputs[edge.sourceHandle];
+          
+          // Fallback for legacy handles (before dataType:role rename)
+          if (value === undefined) {
+             if (edge.sourceHandle === 'image') value = sourceOutputs['image:output'];
+             if (edge.sourceHandle === 'mask')  value = sourceOutputs['mask:output'];
+          }
+
+          // Map to target handle
+          let targetKey = edge.targetHandle;
+          
+          // Legacy mapping for target nodes that now expect typed handles
+          if (targetKey === 'image') targetKey = 'image:input';
+          if (targetKey === 'mask')  targetKey = 'mask:input';
+          if (targetKey === 'base')  targetKey = 'imageA:input';
+          if (targetKey === 'blend') targetKey = 'imageB:input';
+
+          inputs[targetKey] = value ?? null;
         }
       }
     }

@@ -1,10 +1,11 @@
-import { memo, useCallback, useRef, useState, useEffect } from "react";
-import { Handle, Position, NodeProps, useReactFlow } from "reactflow";
+import { memo, useCallback, useRef, useEffect } from "react";
+import { Handle, Position, NodeProps } from "reactflow";
 import usePipelineStore from "@/store/pipelineStore";
 import { Slider } from "@/components/ui/slider";
+import NodeWrapper from "./NodeWrapper";
+import { handleRow } from "./handleStyles";
 
-function MaskNode({ id, data }: NodeProps) {
-  const { setNodes, setEdges } = useReactFlow();
+function MaskNode({ id, data, selected }: NodeProps) {
   const updateNodeData = usePipelineStore((s) => s.updateNodeData);
   const executePipeline = usePipelineStore((s) => s.executePipeline);
   const nodeOutputs = usePipelineStore((s) => s.nodeOutputs);
@@ -23,17 +24,10 @@ function MaskNode({ id, data }: NodeProps) {
     [id, updateNodeData]
   );
 
-  const deleteNode = useCallback(() => {
-    setNodes((nds) => nds.filter((n) => n.id !== id));
-    setEdges((eds) => eds.filter((e) => e.source !== id && e.target !== id));
-  }, [id, setNodes, setEdges]);
-
   const exportMaskAndExecute = useCallback(async () => {
     const drawingCanvas = maskCanvasRef.current;
     if (!drawingCanvas) return;
 
-    // Create a proper black+white mask bitmap
-    // black background + white strokes from drawing canvas
     const exportCanvas = new OffscreenCanvas(drawingCanvas.width, drawingCanvas.height);
     const exportCtx = exportCanvas.getContext("2d")!;
 
@@ -49,9 +43,6 @@ function MaskNode({ id, data }: NodeProps) {
     setTimeout(() => executePipeline(), 0);
   }, [id, updateNodeData, executePipeline]);
 
-  // Initial canvas fill is now handled by container background black
-  // and exportMaskAndExecute filling black for the mask output.
-
   // Draw reference image on background layer
   useEffect(() => {
     if (!inputImage || !bgCanvasRef.current) return;
@@ -59,7 +50,6 @@ function MaskNode({ id, data }: NodeProps) {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    // Matching resolution or using default? Let's use 400x300 as baseline
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(inputImage, 0, 0, canvas.width, canvas.height);
   }, [inputImage]);
@@ -126,23 +116,17 @@ function MaskNode({ id, data }: NodeProps) {
     setTimeout(() => executePipeline(), 0);
   };
 
+  const leftRow = handleRow({ side: 'left' });
+  const rightRow = handleRow({ side: 'right' });
+
   return (
-    <div className="node-surface relative group">
-      <Handle type="target" position={Position.Left} id="image" className="handle-image" style={{ top: "50%" }} />
-      <button
-        onClick={deleteNode}
-        className="absolute top-1 right-1 w-4 h-4 flex items-center justify-center
-                   text-zinc-600 hover:text-red-400 text-xs rounded
-                   opacity-0 group-hover:opacity-100 transition-opacity z-10"
-      >
-        ×
-      </button>
-      <div className="node-header text-mask-color">Mask Drawing</div>
-      <div className="node-body space-y-4">
+    <NodeWrapper id={id} label="Mask Drawing" selected={selected}>
+      <div className="space-y-4">
         <div
-          className="relative w-full nodrag nopan bg-black"
+          className="relative w-full nodrag nopan"
           style={{
             height: "300px",
+            background: "#1231232",
             borderRadius: "4px",
             overflow: "hidden",
             width: "400px",
@@ -190,16 +174,36 @@ function MaskNode({ id, data }: NodeProps) {
         <button className="node-btn w-full mt-2" onClick={clearMask}>
           Clear Mask
         </button>
+
+        <div className="mt-4 space-y-2">
+          <div className={leftRow.row()}>
+            <Handle type="target" position={Position.Left} id="image:input" className="!left-[-20px]" />
+            <span className={leftRow.label()}>image</span>
+          </div>
+          <div className={rightRow.row()}>
+            <span className={rightRow.label()}>image</span>
+            <Handle
+              type="source"
+              position={Position.Right}
+              id="image:output"
+              className="!right-[-20px]"
+            />
+          </div>
+          <div className={rightRow.row()}>
+            <span className={rightRow.label()}>mask</span>
+            <Handle
+              type="source"
+              position={Position.Right}
+              id="mask:output"
+              className="!right-[-20px]"
+            />
+          </div>
+        </div>
       </div>
-      <Handle
-        type="source"
-        position={Position.Right}
-        id="mask"
-        className="handle-mask"
-        style={{ top: "60%" }}
-      />
-    </div>
+    </NodeWrapper>
   );
 }
 
+
 export default memo(MaskNode);
+

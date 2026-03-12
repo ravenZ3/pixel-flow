@@ -16,8 +16,8 @@ export default function ImageCanvas() {
 
   // Get both image and mask from the active output node
   const outputData = activePreviewNodeId ? nodeOutputs[activePreviewNodeId] : null;
-  const imageBitmap = (outputData?.image as ImageBitmap) ?? null;
-  const maskBitmap = (outputData?.mask as ImageBitmap) ?? null;
+  const imageBitmap = (outputData?.["image:output"] as ImageBitmap) ?? (outputData?.image as ImageBitmap) ?? null;
+  const maskBitmap = (outputData?.["mask:output"] as ImageBitmap) ?? (outputData?.mask as ImageBitmap) ?? null;
 
   const isMaskConnected = !!maskBitmap;
 
