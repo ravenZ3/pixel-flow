@@ -5,7 +5,7 @@ export async function executePipeline(
   nodes: Node[],
   edges: Edge[],
   getNodeData: (id: string) => Record<string, unknown>
-): Promise<Record<string, Record<string, ImageBitmap | string | null>>> {
+): Promise<Record<string, Record<string, any>>> {
   // Build adjacency list and in-degree map
   const inDegree = new Map<string, number>();
   const adjacency = new Map<
@@ -45,7 +45,7 @@ export async function executePipeline(
   }
 
   // Execute each node in topological order
-  const allOutputs: Record<string, Record<string, ImageBitmap | string | null>> = {};
+  const allOutputs: Record<string, Record<string, any>> = {};
 
   const pipelineStart = performance.now();
 
@@ -93,8 +93,21 @@ export async function executePipeline(
       }
     }
 
-    const outputs = await executor.execute(inputs, nodeData);
-    allOutputs[nodeId] = outputs;
+    const result = await executor.execute(inputs, nodeData);
+    
+    // Check if node requests a data update
+    if (result && typeof result === 'object' && '_updateNodeData' in result) {
+      const { _updateNodeData, ...cleanResult } = result as any;
+      
+      // Update store immediately so subsequent nodes see the new state if needed
+      // (though usually these updates are for component state)
+      const { updateNodeData } = (await import("@/store/pipelineStore")).default.getState();
+      updateNodeData(nodeId, _updateNodeData);
+      
+      allOutputs[nodeId] = cleanResult;
+    } else {
+      allOutputs[nodeId] = result;
+    }
   }
 
   const elapsed = performance.now() - pipelineStart;

@@ -19,6 +19,8 @@ import ColorNode from "./nodes/ColorNode";
 import FilterNode from "./nodes/FilterNode";
 import MaskNode from "./nodes/MaskNode";
 import BlendNode from "./nodes/BlendNode";
+import CannyEdgeNode from "./nodes/CannyEdgeNode";
+import ASCIINode from "./nodes/ASCIINode";
 
 const nodeTypes = {
   ImageInput: ImageInputNode,
@@ -27,6 +29,8 @@ const nodeTypes = {
   Mask: MaskNode,
   Blend: BlendNode,
   Output: OutputNode,
+  CannyEdge: CannyEdgeNode,
+  ASCII: ASCIINode,
 };
 
 let nodeIdCounter = 0;
@@ -86,11 +90,20 @@ function NodeEditorInner() {
   }, [executePipeline]);
 
   const isValidConnection = useCallback((connection: Connection) => {
-    const sourceType = connection.sourceHandle?.split(':')[0] ?? '';
-    const targetType = connection.targetHandle?.split(':')[0] ?? '';
+    const sourceHandle = connection.sourceHandle ?? "";
+    const targetHandle = connection.targetHandle ?? "";
+
+    const sourceType = sourceHandle.split(":")[0] ?? "";
+    const targetType = targetHandle.split(":")[0] ?? "";
 
     // normalize imageA and imageB to image for matching
-    const normalize = (t: string) => t.startsWith('image') ? 'image' : t;
+    const normalize = (t: string) => (t.startsWith("image") ? "image" : t);
+
+    // Special case: image:output can connect to mask:input
+    // (used for Canny edge -> MaskNode external mask)
+    if (sourceHandle === "image:output" && targetHandle === "mask:input") {
+      return true;
+    }
 
     return normalize(sourceType) === normalize(targetType);
   }, []);

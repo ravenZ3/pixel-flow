@@ -112,7 +112,7 @@ const usePipelineStore = create<PipelineStore>((set, get) => ({
       const activeOutputNode = nodes.find(n => n.id === nextActiveId);
       if (activeOutputNode) {
         const maskEdge = edges.find(
-          e => e.target === activeOutputNode.id && e.targetHandle === 'mask'
+          e => e.target === activeOutputNode.id && (e.targetHandle === 'mask:input' || e.targetHandle === 'mask')
         );
         const hasMask = !!maskEdge;
         if (hasMask && !showMask) nextShowMask = true;

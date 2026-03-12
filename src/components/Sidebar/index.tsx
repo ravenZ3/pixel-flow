@@ -6,6 +6,8 @@ const nodeItems = [
   { type: "ImageInput", label: "Image Input" },
   { type: "Color", label: "Color" },
   { type: "Filter", label: "Filter" },
+  { type: "CannyEdge", label: "Canny Edge" },
+  { type: "ASCII", label: "ASCII Art" },
   { type: "Mask", label: "Mask" },
   { type: "Blend", label: "Blend" },
   { type: "Output", label: "Output" },

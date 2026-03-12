@@ -46,7 +46,7 @@ function BlendNode({ id, data, selected }: NodeProps) {
   const rightRow = handleRow({ side: 'right' });
 
   return (
-    <NodeWrapper id={id} label="Blend" selected={selected}>
+    <NodeWrapper id={id} label="Blend" selected={selected} intent="pink">
       {outputImage && (
         <div className="mb-4">
           <canvas
@@ -76,7 +76,7 @@ function BlendNode({ id, data, selected }: NodeProps) {
           </Select>
         </div>
         <div className="node-control">
-          <label className="node-label">Opacity: {(opacity * 100).toFixed(0)}%</label>
+          <label className="node-label">Opacity {(opacity * 100).toFixed(0)}%</label>
           <Slider
             value={[opacity]}
             min={0}

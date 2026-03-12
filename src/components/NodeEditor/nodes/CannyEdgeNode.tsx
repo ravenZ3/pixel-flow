@@ -5,14 +5,12 @@ import { Slider } from "@/components/ui/slider";
 import NodeWrapper from "./NodeWrapper";
 import { handleRow } from "./handleStyles";
 
-function ColorNode({ id, data, selected }: NodeProps) {
+function CannyEdgeNode({ id, data, selected }: NodeProps) {
   const updateNodeData = usePipelineStore((s) => s.updateNodeData);
 
-  const brightness = data.brightness ?? 0;
-  const contrast = data.contrast ?? 0;
-  const saturation = data.saturation ?? 0;
-  const hue = data.hue ?? 0;
-  const gamma = data.gamma ?? 1.0;
+  const lowThreshold = data.lowThreshold ?? 20;
+  const highThreshold = data.highThreshold ?? 80;
+  const blurRadius = data.blurRadius ?? 1;
 
   const handleChange = useCallback(
     (key: string, value: number) => {
@@ -42,7 +40,7 @@ function ColorNode({ id, data, selected }: NodeProps) {
   const rightRow = handleRow({ side: 'right' });
 
   return (
-    <NodeWrapper id={id} label="Color" selected={selected}>
+    <NodeWrapper id={id} label="Canny Edge" selected={selected}>
       {outputImage && (
         <div className="mb-4">
           <canvas
@@ -51,55 +49,35 @@ function ColorNode({ id, data, selected }: NodeProps) {
           />
         </div>
       )}
-      <div className="space-y-4 nopan nodrag">
+      <div className="space-y-4 nodrag nopan">
         <div className="node-control">
-          <label className="node-label">Brightness: {brightness}</label>
+          <label className="node-label">Low Threshold: {lowThreshold}</label>
           <Slider
-            value={[brightness]}
-            min={-100}
+            value={[lowThreshold]}
+            min={0}
             max={100}
             step={1}
-            onValueChange={(val) => handleChange("brightness", Array.isArray(val) ? val[0] : val)}
+            onValueChange={(val) => handleChange("lowThreshold", Array.isArray(val) ? val[0] : val)}
           />
         </div>
         <div className="node-control">
-          <label className="node-label">Contrast: {contrast}</label>
+          <label className="node-label">High Threshold: {highThreshold}</label>
           <Slider
-            value={[contrast]}
-            min={-100}
-            max={100}
+            value={[highThreshold]}
+            min={0}
+            max={200}
             step={1}
-            onValueChange={(val) => handleChange("contrast", Array.isArray(val) ? val[0] : val)}
+            onValueChange={(val) => handleChange("highThreshold", Array.isArray(val) ? val[0] : val)}
           />
         </div>
         <div className="node-control">
-          <label className="node-label">Saturation: {saturation}</label>
+          <label className="node-label">Blur Radius: {blurRadius}</label>
           <Slider
-            value={[saturation]}
-            min={-100}
-            max={100}
-            step={1}
-            onValueChange={(val) => handleChange("saturation", Array.isArray(val) ? val[0] : val)}
-          />
-        </div>
-        <div className="node-control">
-          <label className="node-label">Hue: {hue}</label>
-          <Slider
-            value={[hue]}
-            min={-180}
-            max={180}
-            step={1}
-            onValueChange={(val) => handleChange("hue", Array.isArray(val) ? val[0] : val)}
-          />
-        </div>
-        <div className="node-control">
-          <label className="node-label">Gamma: {gamma}</label>
-          <Slider
-            value={[gamma]}
-            min={0.1}
-            max={3.0}
-            step={0.05}
-            onValueChange={(val) => handleChange("gamma", Array.isArray(val) ? val[0] : val)}
+            value={[blurRadius]}
+            min={0}
+            max={5}
+            step={0.1}
+            onValueChange={(val) => handleChange("blurRadius", Array.isArray(val) ? val[0] : val)}
           />
         </div>
       </div>
@@ -128,4 +106,4 @@ function ColorNode({ id, data, selected }: NodeProps) {
   );
 }
 
-export default memo(ColorNode);
+export default memo(CannyEdgeNode);

@@ -55,14 +55,16 @@ function ImageInputNode({ id, data, selected }: NodeProps) {
         className="hidden"
         id={`file-upload-${id}`}
       />
-      <button className="node-btn" onClick={() => fileRef.current?.click()}>
+      <button className="node-btn w-full mb-4" onClick={() => fileRef.current?.click()}>
         Upload Image
       </button>
       {uploadedImage && (
-        <canvas
-          ref={canvasRef}
-          className="node-thumbnail-canvas w-full h-full object-contain block mt-2"
-        />
+        <div className="mb-4">
+          <canvas
+            ref={canvasRef}
+            className="node-thumbnail-canvas w-full h-full object-contain block"
+          />
+        </div>
       )}
       
       <div className="mt-4">
