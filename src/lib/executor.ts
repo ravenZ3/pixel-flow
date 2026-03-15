@@ -101,8 +101,8 @@ export async function executePipeline(
       
       // Update store immediately so subsequent nodes see the new state if needed
       // (though usually these updates are for component state)
-      const { updateNodeData } = (await import("@/store/pipelineStore")).default.getState();
-      updateNodeData(nodeId, _updateNodeData);
+      const { updateNodeData } = (await import("@/store/pipelineStore")).default.getState() as any;
+      updateNodeData(nodeId, _updateNodeData, true);
       
       allOutputs[nodeId] = cleanResult;
     } else {

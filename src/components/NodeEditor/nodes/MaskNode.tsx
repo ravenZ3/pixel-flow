@@ -1,4 +1,4 @@
-import { memo, useCallback, useRef, useEffect, useState } from "react";
+import { memo, useCallback, useRef, useEffect } from "react";
 import { Handle, Position, NodeProps, useEdges } from "reactflow";
 import usePipelineStore from "@/store/pipelineStore";
 import { Slider } from "@/components/ui/slider";
@@ -11,12 +11,14 @@ function MaskNode({ id, data, selected }: NodeProps) {
   const nodeOutputs = usePipelineStore((s) => s.nodeOutputs);
   const edges = useEdges();
 
-  const [tool, setTool] = useState<'brush' | 'eraser'>('brush');
+  const tool = data.tool ?? 'brush';
+  const setTool = (newTool: 'brush' | 'eraser') => updateNodeData(id, { tool: newTool });
 
   const bgCanvasRef = useRef<HTMLCanvasElement>(null);
   const maskCanvasRef = useRef<HTMLCanvasElement>(null);
   const isDrawing = useRef(false);
   const skipAutoLoad = useRef(false);
+  const hasLoadedSomething = useRef(false);
 
   const brushSize = data.brushSize ?? 20;
   const inputImage = nodeOutputs[id]?.inputImage as ImageBitmap | null;
@@ -44,33 +46,45 @@ function MaskNode({ id, data, selected }: NodeProps) {
     exportCtx.drawImage(drawingCanvas, 0, 0);
 
     const bitmap = await createImageBitmap(exportCanvas);
-    
-    // Set flag to avoid useEffect loop
+
+    // Set flag to avoid useEffect feedback loop
     skipAutoLoad.current = true;
     updateNodeData(id, { mask: bitmap });
-    setTimeout(() => executePipeline(), 0);
   }, [id, updateNodeData, executePipeline]);
 
-  // Load external mask when it changes
+  // Sync canvas with store data (on mount or when mask changes externally)
   useEffect(() => {
-    const externalMask = data.externalMask as ImageBitmap | null;
-    if (!externalMask || !maskCanvasRef.current) return;
+    const canvas = maskCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
 
+    // Cases to load:
+    // 1. We just finished an edit (skipAutoLoad is true) -> already on canvas, just clear flag
     if (skipAutoLoad.current) {
       skipAutoLoad.current = false;
       return;
     }
 
-    const canvas = maskCanvasRef.current;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
+    // 2. We have a drawn mask in the store (e.g. from previous edit or session)
+    if (data.mask instanceof ImageBitmap) {
+      ctx.fillStyle = "#000000";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(data.mask, 0, 0, canvas.width, canvas.height);
+      hasLoadedSomething.current = true;
+      return;
+    }
 
-    ctx.fillStyle = "#000000";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(externalMask, 0, 0, canvas.width, canvas.height);
-
-    exportMaskAndExecute();
-  }, [data.externalMask]);
+    // 3. We have an external mask and nothing drawn yet
+    if (data.externalMask instanceof ImageBitmap && !hasLoadedSomething.current) {
+      ctx.fillStyle = "#000000";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(data.externalMask, 0, 0, canvas.width, canvas.height);
+      hasLoadedSomething.current = true;
+      // Export it as our starting internal mask
+      exportMaskAndExecute();
+    }
+  }, [data.mask, data.externalMask]); // Re-sync if store data changes
 
   // Draw reference image on background layer
   useEffect(() => {
@@ -135,11 +149,11 @@ function MaskNode({ id, data, selected }: NodeProps) {
     } else {
       ctx.strokeStyle = "#000000";
     }
-    
+
     ctx.lineTo(x, y);
     ctx.stroke();
 
-    // Live update on every stroke
+    // Export on every move for live update
     exportMaskAndExecute();
   };
 
@@ -150,10 +164,10 @@ function MaskNode({ id, data, selected }: NodeProps) {
     if (!ctx) return;
     ctx.fillStyle = "#000000";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    
+
+    hasLoadedSomething.current = false;
     skipAutoLoad.current = false;
     updateNodeData(id, { mask: null });
-    setTimeout(() => executePipeline(), 0);
   };
 
   const resetToExternal = () => {
@@ -162,10 +176,12 @@ function MaskNode({ id, data, selected }: NodeProps) {
     const canvas = maskCanvasRef.current;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
+
     ctx.fillStyle = '#000000';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(externalMask, 0, 0, canvas.width, canvas.height);
-    
+
+    hasLoadedSomething.current = true;
     skipAutoLoad.current = false;
     exportMaskAndExecute();
   };
@@ -198,21 +214,19 @@ function MaskNode({ id, data, selected }: NodeProps) {
         <div className="flex gap-1 mb-2">
           <button
             onClick={() => setTool('brush')}
-            className={`flex-1 text-[10px] font-mono py-1 rounded border transition-colors ${
-              tool === 'brush'
-                ? 'border-cyan-400 text-cyan-400'
-                : 'border-zinc-700 text-zinc-500 hover:border-zinc-500 hover:text-zinc-300'
-            }`}
+            className={`flex-1 text-[10px] font-mono py-1 rounded border transition-colors ${tool === 'brush'
+              ? 'border-cyan-400 text-cyan-400 bg-cyan-950/20'
+              : 'border-zinc-700 text-zinc-500 hover:border-zinc-500 hover:text-zinc-300'
+              }`}
           >
             ✦ brush
           </button>
           <button
             onClick={() => setTool('eraser')}
-            className={`flex-1 text-[10px] font-mono py-1 rounded border transition-colors ${
-              tool === 'eraser'
-                ? 'border-red-400 text-red-400'
-                : 'border-zinc-700 text-zinc-500 hover:border-zinc-500 hover:text-zinc-300'
-            }`}
+            className={`flex-1 text-[10px] font-mono py-1 rounded border transition-colors ${tool === 'eraser'
+              ? 'border-red-400 text-red-400 bg-red-950/20'
+              : 'border-zinc-700 text-zinc-500 hover:border-zinc-500 hover:text-zinc-300'
+              }`}
           >
             ◌ eraser
           </button>
@@ -237,14 +251,13 @@ function MaskNode({ id, data, selected }: NodeProps) {
             style={{ opacity: 0.35, pointerEvents: "none" }}
           />
 
-          {/* Drawing layer — black background, white/black strokes */}
+          {/* Drawing layer — transparent background (composed to black) */}
           <canvas
             ref={maskCanvasRef}
             width={400}
             height={300}
-            className={`absolute inset-0 w-full h-full nodrag nopan ${
-              tool === 'brush' ? 'cursor-crosshair' : 'cursor-cell'
-            }`}
+            className={`absolute inset-0 w-full h-full nodrag nopan ${tool === 'brush' ? 'cursor-crosshair' : 'cursor-cell'
+              }`}
             onMouseDown={startDrawing}
             onMouseMove={draw}
             onMouseUp={stopDrawing}
@@ -258,7 +271,7 @@ function MaskNode({ id, data, selected }: NodeProps) {
         </p>
 
         <div className="node-control">
-          <label className="node-label">Brush Size: {brushSize}</label>
+          <label className="node-label font-mono text-[10px]">Brush Size: {brushSize}</label>
           <Slider
             value={[brushSize]}
             min={1}

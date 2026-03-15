@@ -67,14 +67,16 @@ const usePipelineStore = create<PipelineStore>((set, get) => ({
     set({ nodes: [...get().nodes, node] });
   },
 
-  updateNodeData: (nodeId, data) => {
+  updateNodeData: (nodeId, data, silent = false) => {
     set((state) => ({
       nodes: state.nodes.map((n) =>
         n.id === nodeId ? { ...n, data: { ...n.data, ...data } } : n
       ),
     }));
-    // Auto-execute on data change
-    setTimeout(() => get().executePipeline(), 0);
+    // Auto-execute on data change unless requested otherwise
+    if (!silent) {
+      setTimeout(() => get().executePipeline(), 0);
+    }
   },
 
   setNodeOutput: (nodeId, outputs) => {
