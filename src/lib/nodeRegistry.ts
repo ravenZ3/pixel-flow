@@ -434,6 +434,17 @@ const nodeRegistry: Record<string, NodeExecutor> = {
 
       return { 'image:output': outCanvas.transferToImageBitmap() }
     },
+
+  },
+  Prompt: {
+    execute: async (inputs, nodeData) => {
+      return {
+        'prompt': {
+          positive: nodeData?.prompt || "",
+          negative: nodeData?.negativePrompt || "",
+        }
+      }
+    }
   },
   Output: {
     execute: async (inputs) => {

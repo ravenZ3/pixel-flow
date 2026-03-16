@@ -5,7 +5,7 @@ export const handleRow = tv({
     row: 'flex items-center relative h-5',
     label: 'text-[10px] text-zinc-500 font-mono',
     labelTwo: 'text-[10px] text-yellow-500 font-mono',
-
+    handle: '!right-[-20px]'
   },
   variants: {
     side: {

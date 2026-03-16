@@ -4,8 +4,20 @@ import nodeRegistry from "./nodeRegistry";
 export async function executePipeline(
   nodes: Node[],
   edges: Edge[],
+  nodeOutputs: Record<string, Record<string, any>>,
+  dirtyNodes: Set<string>,
   getNodeData: (id: string) => Record<string, unknown>
-): Promise<Record<string, Record<string, any>>> {
+): Promise<{
+  outputs: Record<string, Record<string, any>>;
+  clearedDirtyNodes: Set<string>;
+  executionTimeMs: number;
+  skippedNodes: string[];
+  executedNodes: string[];
+}> {
+  const start = performance.now();
+  const skippedNodes: string[] = [];
+  const executedNodes: string[] = [];
+
   // Build adjacency list and in-degree map
   const inDegree = new Map<string, number>();
   const adjacency = new Map<
@@ -33,10 +45,10 @@ export async function executePipeline(
     if (degree === 0) queue.push(nodeId);
   }
 
-  const sorted: string[] = [];
+  const sortedIds: string[] = [];
   while (queue.length > 0) {
     const current = queue.shift()!;
-    sorted.push(current);
+    sortedIds.push(current);
     for (const neighbor of adjacency.get(current) ?? []) {
       const newDegree = (inDegree.get(neighbor.targetId) ?? 1) - 1;
       inDegree.set(neighbor.targetId, newDegree);
@@ -44,19 +56,27 @@ export async function executePipeline(
     }
   }
 
-  // Execute each node in topological order
-  const allOutputs: Record<string, Record<string, any>> = {};
-
-  const pipelineStart = performance.now();
-
-  for (const nodeId of sorted) {
+  // Step 2 — execute in order with cache check
+  for (const nodeId of sortedIds) {
     const node = nodes.find((n) => n.id === nodeId);
     if (!node || !node.type) continue;
 
-    const executor = nodeRegistry[node.type];
-    if (!executor) continue;
+    const isDirty = dirtyNodes.has(nodeId);
+    const hasCachedOutput = !!nodeOutputs[nodeId];
 
-    // Gather inputs from upstream edges
+    if (!isDirty && hasCachedOutput) {
+      // cache hit — skip this node
+      skippedNodes.push(nodeId);
+      continue;
+    }
+
+    const executor = nodeRegistry[node.type];
+    if (!executor) {
+      skippedNodes.push(nodeId);
+      continue;
+    }
+
+    // gather inputs from upstream edges
     const inputs: Record<string, ImageBitmap | string | null> = {};
     const nodeData = getNodeData(nodeId);
 
@@ -68,25 +88,25 @@ export async function executePipeline(
     // Overlay inputs from connected upstream nodes
     for (const edge of edges) {
       if (edge.target === nodeId) {
-        const sourceOutputs = allOutputs[edge.source];
+        const sourceOutputs = nodeOutputs[edge.source];
         if (sourceOutputs && edge.sourceHandle && edge.targetHandle) {
           // Precise match
           let value = sourceOutputs[edge.sourceHandle];
-          
+
           // Fallback for legacy handles (before dataType:role rename)
           if (value === undefined) {
-             if (edge.sourceHandle === 'image') value = sourceOutputs['image:output'];
-             if (edge.sourceHandle === 'mask')  value = sourceOutputs['mask:output'];
+            if (edge.sourceHandle === "image") value = sourceOutputs["image:output"];
+            if (edge.sourceHandle === "mask") value = sourceOutputs["mask:output"];
           }
 
           // Map to target handle
           let targetKey = edge.targetHandle;
-          
+
           // Legacy mapping for target nodes that now expect typed handles
-          if (targetKey === 'image') targetKey = 'image:input';
-          if (targetKey === 'mask')  targetKey = 'mask:input';
-          if (targetKey === 'base')  targetKey = 'imageA:input';
-          if (targetKey === 'blend') targetKey = 'imageB:input';
+          if (targetKey === "image") targetKey = "image:input";
+          if (targetKey === "mask") targetKey = "mask:input";
+          if (targetKey === "base") targetKey = "imageA:input";
+          if (targetKey === "blend") targetKey = "imageB:input";
 
           inputs[targetKey] = value ?? null;
         }
@@ -94,24 +114,38 @@ export async function executePipeline(
     }
 
     const result = await executor.execute(inputs, nodeData);
-    
+
     // Check if node requests a data update
-    if (result && typeof result === 'object' && '_updateNodeData' in result) {
+    if (result && typeof result === "object" && "_updateNodeData" in result) {
       const { _updateNodeData, ...cleanResult } = result as any;
-      
+
       // Update store immediately so subsequent nodes see the new state if needed
-      // (though usually these updates are for component state)
       const { updateNodeData } = (await import("@/store/pipelineStore")).default.getState() as any;
       updateNodeData(nodeId, _updateNodeData, true);
-      
-      allOutputs[nodeId] = cleanResult;
+
+      nodeOutputs[nodeId] = cleanResult;
     } else {
-      allOutputs[nodeId] = result;
+      nodeOutputs[nodeId] = result;
     }
+    executedNodes.push(nodeId);
   }
 
-  const elapsed = performance.now() - pipelineStart;
-  console.log(`[Pipeline] Executed ${nodes.length} nodes in ${elapsed.toFixed(2)}ms`);
+  const elapsed = performance.now() - start;
 
-  return allOutputs;
+  // Log for benchmarking
+  console.log(
+    `[Pipeline v2.1] Executed: ${executedNodes.length} nodes | ` +
+    `Skipped: ${skippedNodes.length} nodes | ` +
+    `Time: ${elapsed.toFixed(2)}ms`
+  );
+  console.log(`[Pipeline v2.1] Executed: ${executedNodes.join(", ")}`);
+  console.log(`[Pipeline v2.1] Skipped (cached): ${skippedNodes.join(", ")}`);
+
+  return {
+    outputs: nodeOutputs,
+    clearedDirtyNodes: new Set<string>(),
+    executionTimeMs: elapsed,
+    skippedNodes,
+    executedNodes,
+  };
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, DragEvent } from "react";
+import { useCallback, useRef, DragEvent, useEffect } from "react";
 import ReactFlow, {
   MiniMap,
   Controls,
@@ -21,6 +21,7 @@ import MaskNode from "./nodes/MaskNode";
 import BlendNode from "./nodes/BlendNode";
 import CannyEdgeNode from "./nodes/CannyEdgeNode";
 import ASCIINode from "./nodes/ASCIINode";
+import PromptInputNode from "./nodes/PromptInputNode";
 
 const nodeTypes = {
   ImageInput: ImageInputNode,
@@ -31,6 +32,7 @@ const nodeTypes = {
   Output: OutputNode,
   CannyEdge: CannyEdgeNode,
   ASCII: ASCIINode,
+  Prompt: PromptInputNode,
 };
 
 let nodeIdCounter = 0;
@@ -45,6 +47,7 @@ function NodeEditorInner() {
   const onEdgesChange = usePipelineStore((s) => s.onEdgesChange);
   const onConnect = usePipelineStore((s) => s.onConnect);
   const addNode = usePipelineStore((s) => s.addNode);
+  const markAllDirty = usePipelineStore((s) => s.markAllDirty);
   const executePipeline = usePipelineStore((s) => s.executePipeline);
 
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
@@ -53,6 +56,10 @@ function NodeEditorInner() {
   const onInit = useCallback((instance: ReactFlowInstance) => {
     reactFlowInstance.current = instance;
   }, []);
+
+  useEffect(() => {
+    markAllDirty();
+  }, [markAllDirty]);
 
   const onDragOver = useCallback((event: DragEvent) => {
     event.preventDefault();
@@ -82,12 +89,12 @@ function NodeEditorInner() {
   );
 
   const onNodesDelete = useCallback(() => {
-    setTimeout(() => executePipeline(), 0);
-  }, [executePipeline]);
+    // handled by onNodesChange in store
+  }, []);
 
   const onEdgesDelete = useCallback(() => {
-    setTimeout(() => executePipeline(), 0);
-  }, [executePipeline]);
+    // handled by onEdgesChange in store
+  }, []);
 
   const isValidConnection = useCallback((connection: Connection) => {
     const sourceHandle = connection.sourceHandle ?? "";
@@ -97,7 +104,11 @@ function NodeEditorInner() {
     const targetType = targetHandle.split(":")[0] ?? "";
 
     // normalize imageA and imageB to image for matching
-    const normalize = (t: string) => (t.startsWith("image") ? "image" : t);
+    const normalize = (t: string) => {
+      if (t.startsWith("image")) return "image";
+      if (t.startsWith("prompt")) return "prompt";
+      return t;
+    };
 
     // Special case: image:output can connect to mask:input
     // (used for Canny edge -> MaskNode external mask)
@@ -130,7 +141,7 @@ function NodeEditorInner() {
       >
         <Controls className="react-flow-controls" />
         <MiniMap
-          nodeColor="#1c1c1c"
+          nodeColor="#1c1c1c1c"
           maskColor="rgba(0,0,0,0.7)"
           className="react-flow-minimap"
         />

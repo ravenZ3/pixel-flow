@@ -11,6 +11,7 @@ const nodeItems = [
   { type: "Mask", label: "Mask" },
   { type: "Blend", label: "Blend" },
   { type: "Output", label: "Output" },
+  { type: "Prompt", label: "Prompt" }
 ];
 
 export default function Sidebar() {

@@ -70,12 +70,12 @@ function ASCIINode({ id, data, selected }: NodeProps) {
           <Slider
             value={[fontSize]}
             min={4}
-            max={24}
+            max={64}
             step={1}
             onValueChange={(val) => handleChange("fontSize", Array.isArray(val) ? val[0] : val)}
           />
         </div>
-        
+
         <div className="node-control">
           <label className="node-label">Character Set</label>
           <Select value={charSet} onValueChange={(val) => handleChange("charSet", val)}>
@@ -127,7 +127,7 @@ function ASCIINode({ id, data, selected }: NodeProps) {
 
         {isMaskConnected && (
           <div className="mt-2 space-y-2">
-             <p className="text-[10px] font-mono text-cyan-400 text-center">
+            <p className="text-[10px] font-mono text-cyan-400 text-center">
               ● masked mode
             </p>
             <div className="node-control">
@@ -148,11 +148,10 @@ function ASCIINode({ id, data, selected }: NodeProps) {
 
         <div className="flex items-center justify-between">
           <label className="text-[10px] text-zinc-500 font-mono uppercase">Invert</label>
-          <button 
+          <button
             onClick={() => handleChange("invert", !invert)}
-            className={`text-[10px] px-2 py-1 rounded border transition-all ${
-              invert ? "border-cyan-500/50 bg-cyan-950/20 text-cyan-400" : "border-zinc-800 text-zinc-500"
-            }`}
+            className={`text-[10px] px-2 py-1 rounded border transition-all ${invert ? "border-cyan-500/50 bg-cyan-950/20 text-cyan-400" : "border-zinc-800 text-zinc-500"
+              }`}
           >
             {invert ? "ON" : "OFF"}
           </button>
