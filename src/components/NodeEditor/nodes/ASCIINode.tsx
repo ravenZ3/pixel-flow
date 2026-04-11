@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useRef } from "react";
 import { Handle, Position, NodeProps, useEdges } from "reactflow";
-import usePipelineStore from "@/store/pipelineStore";
+import useUIStore from "@/store/uiStore";
+import useExecutionStore from "@/store/executionStore";
 import { Slider } from "@/components/ui/slider";
 import {
   Select,
@@ -13,16 +14,20 @@ import NodeWrapper from "./NodeWrapper";
 import { handleRow } from "./handleStyles";
 
 function ASCIINode({ id, data, selected }: NodeProps) {
-  const updateNodeData = usePipelineStore((s) => s.updateNodeData);
+  const updateNodeData = useUIStore((s) => s.updateNodeData);
   const edges = useEdges();
 
   const isMaskConnected = edges.some(
     (e) => e.target === id && e.targetHandle === "mask:input"
   );
+  const isBaseConnected = edges.some(
+    (e) => e.target === id && e.targetHandle === "base:input"
+  );
 
   const fontSize = data.fontSize ?? 8;
   const charSet = data.charSet ?? "classic";
   const invert = data.invert === true;
+  const glowAmount = data.glowAmount ?? 0;
 
   const handleChange = useCallback(
     (key: string, value: any) => {
@@ -31,7 +36,7 @@ function ASCIINode({ id, data, selected }: NodeProps) {
     [id, updateNodeData]
   );
 
-  const nodeOutputs = usePipelineStore((s) => s.nodeOutputs);
+  const nodeOutputs = useExecutionStore((s) => s.nodeOutputs);
   const outputImage = nodeOutputs[id]?.["image:output"] as ImageBitmap | undefined;
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -62,6 +67,7 @@ function ASCIINode({ id, data, selected }: NodeProps) {
         </div>
       )}
       <div className="space-y-4 nodrag nopan">
+        {/* Font Size */}
         <div className="node-control">
           <div className="flex justify-between mb-1">
             <label className="node-label">Font Size</label>
@@ -76,6 +82,7 @@ function ASCIINode({ id, data, selected }: NodeProps) {
           />
         </div>
 
+        {/* Character Set */}
         <div className="node-control">
           <label className="node-label">Character Set</label>
           <Select value={charSet} onValueChange={(val) => handleChange("charSet", val)}>
@@ -84,6 +91,7 @@ function ASCIINode({ id, data, selected }: NodeProps) {
             </SelectTrigger>
             <SelectContent className="bg-zinc-900 border-zinc-800 text-zinc-200">
               <SelectItem value="classic">Classic (@#S%...)</SelectItem>
+              <SelectItem value="dense">Dense (70-char ramp)</SelectItem>
               <SelectItem value="blocks">Blocks (█▓▒░)</SelectItem>
               <SelectItem value="minimal">Minimal (@+.)</SelectItem>
               <SelectItem value="braille">Braille (⣿⣷⣯...)</SelectItem>
@@ -91,6 +99,7 @@ function ASCIINode({ id, data, selected }: NodeProps) {
           </Select>
         </div>
 
+        {/* Background */}
         <div className="node-control">
           <label className="node-label">Background</label>
           <Select
@@ -108,6 +117,7 @@ function ASCIINode({ id, data, selected }: NodeProps) {
           </Select>
         </div>
 
+        {/* Color Mode */}
         <div className="node-control">
           <label className="node-label">Color Mode</label>
           <Select
@@ -121,15 +131,56 @@ function ASCIINode({ id, data, selected }: NodeProps) {
               <SelectItem value="original">Original</SelectItem>
               <SelectItem value="grayscale">Grayscale</SelectItem>
               <SelectItem value="solid">Solid</SelectItem>
+              <SelectItem value="matrix">Matrix Green</SelectItem>
+              <SelectItem value="neon">Neon Cyan/Magenta</SelectItem>
+              <SelectItem value="cyberpunk">Cyberpunk</SelectItem>
+              <SelectItem value="fire">Fire</SelectItem>
             </SelectContent>
           </Select>
         </div>
 
+        {/* Glow */}
+        <div className="node-control">
+          <div className="flex justify-between mb-1">
+            <label className="node-label">Glow / Bloom</label>
+            <span className="text-[10px] text-zinc-500">{glowAmount}px</span>
+          </div>
+          <Slider
+            value={[glowAmount]}
+            min={0}
+            max={40}
+            step={1}
+            onValueChange={(val) => handleChange("glowAmount", Array.isArray(val) ? val[0] : val)}
+          />
+        </div>
+        {glowAmount > 0 && (
+          <div className="node-control flex items-center gap-2">
+            <label className="node-label shrink-0">Glow Color</label>
+            <input
+              type="color"
+              value={data.glowColor ?? "#00ffcc"}
+              onChange={(e) => handleChange("glowColor", e.target.value)}
+              className="w-8 h-6 rounded cursor-pointer border border-zinc-700 bg-zinc-900"
+            />
+            <span className="text-[10px] text-zinc-500 font-mono">{data.glowColor ?? "#00ffcc"}</span>
+          </div>
+        )}
+
+        {/* Invert */}
+        <div className="flex items-center justify-between">
+          <label className="text-[10px] text-zinc-500 font-mono uppercase">Invert</label>
+          <button
+            onClick={() => handleChange("invert", !invert)}
+            className={`text-[10px] px-2 py-1 rounded border transition-all ${invert ? "border-cyan-500/50 bg-cyan-950/20 text-cyan-400" : "border-zinc-800 text-zinc-500"}`}
+          >
+            {invert ? "ON" : "OFF"}
+          </button>
+        </div>
+
+        {/* Mask threshold */}
         {isMaskConnected && (
           <div className="mt-2 space-y-2">
-            <p className="text-[10px] font-mono text-cyan-400 text-center">
-              ● masked mode
-            </p>
+            <p className="text-[10px] font-mono text-cyan-400 text-center">● masked mode</p>
             <div className="node-control">
               <div className="flex justify-between mb-1">
                 <label className="node-label">Threshold</label>
@@ -146,47 +197,29 @@ function ASCIINode({ id, data, selected }: NodeProps) {
           </div>
         )}
 
-        <div className="flex items-center justify-between">
-          <label className="text-[10px] text-zinc-500 font-mono uppercase">Invert</label>
-          <button
-            onClick={() => handleChange("invert", !invert)}
-            className={`text-[10px] px-2 py-1 rounded border transition-all ${invert ? "border-cyan-500/50 bg-cyan-950/20 text-cyan-400" : "border-zinc-800 text-zinc-500"
-              }`}
-          >
-            {invert ? "ON" : "OFF"}
-          </button>
-        </div>
+        {/* Base image hint */}
+        {isBaseConnected && (
+          <p className="text-[10px] font-mono text-violet-400 text-center">◈ base image connected — colors sampled from base, density from image</p>
+        )}
       </div>
 
       <div className="mt-4 space-y-2">
         <div className={leftRow.row()}>
-          <Handle
-            type="target"
-            position={Position.Left}
-            id="image:input"
-            className="!left-[-20px]"
-          />
-          <span className={leftRow.label()}>image</span>
+          <Handle type="target" position={Position.Left} id="image:input" className="!left-[-20px]" />
+          <span className={leftRow.label()}>image (density)</span>
         </div>
-
         <div className={leftRow.row()}>
-          <Handle
-            type="target"
-            position={Position.Left}
-            id="mask:input"
-            className="!left-[-20px]"
-          />
+          <Handle type="target" position={Position.Left} id="base:input" className="!left-[-20px]" />
+          <span className={leftRow.label()}>base (color)</span>
+        </div>
+        <div className={leftRow.row()}>
+          <Handle type="target" position={Position.Left} id="mask:input" className="!left-[-20px]" />
           <span className={leftRow.label()}>mask</span>
         </div>
 
         <div className={rightRow.row()}>
           <span className={rightRow.label()}>image</span>
-          <Handle
-            type="source"
-            position={Position.Right}
-            id="image:output"
-            className="!right-[-20px]"
-          />
+          <Handle type="source" position={Position.Right} id="image:output" className="!right-[-20px]" />
         </div>
       </div>
     </NodeWrapper>

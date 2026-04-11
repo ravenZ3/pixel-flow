@@ -1,17 +1,18 @@
 "use client";
 
 import { useRef, useEffect } from "react";
-import usePipelineStore from "@/store/pipelineStore";
+import useUIStore from "@/store/uiStore";
+import useExecutionStore from "@/store/executionStore";
 import { Slider } from "@/components/ui/slider";
 
 export default function ImageCanvas() {
-  const nodeOutputs = usePipelineStore((s) => s.nodeOutputs);
-  const executionTime = usePipelineStore((s) => s.executionTime);
-  const showMask = usePipelineStore((s) => s.showMask);
-  const maskOverlayOpacity = usePipelineStore((s) => s.maskOverlayOpacity);
-  const activePreviewNodeId = usePipelineStore((s) => s.activePreviewNodeId);
-  const setShowMask = usePipelineStore((s) => s.setShowMask);
-  const setMaskOverlayOpacity = usePipelineStore((s) => s.setMaskOverlayOpacity);
+  const nodeOutputs = useExecutionStore((s) => s.nodeOutputs);
+  const executionTime = useExecutionStore((s) => s.executionTime);
+  const showMask = useUIStore((s) => s.showMask);
+  const maskOverlayOpacity = useUIStore((s) => s.maskOverlayOpacity);
+  const activePreviewNodeId = useUIStore((s) => s.activePreviewNodeId);
+  const setShowMask = useUIStore((s) => s.setShowMask);
+  const setMaskOverlayOpacity = useUIStore((s) => s.setMaskOverlayOpacity);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   // Get both image and mask from the active output node

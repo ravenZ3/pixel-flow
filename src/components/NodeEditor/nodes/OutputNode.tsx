@@ -1,7 +1,8 @@
 import { memo, useEffect, useRef } from 'react'
 import { Handle, Position, NodeProps, useEdges } from 'reactflow'
 import { tv } from 'tailwind-variants'
-import usePipelineStore from '@/store/pipelineStore'
+import useUIStore from '@/store/uiStore'
+import useExecutionStore from '@/store/executionStore'
 import { Badge } from '@/components/ui/badge'
 import NodeWrapper from './NodeWrapper'
 
@@ -22,8 +23,8 @@ import { handleRow } from './handleStyles'
 
 function OutputNode({ id, selected }: NodeProps) {
   const edges = useEdges()
-  const nodeOutputs = usePipelineStore(s => s.nodeOutputs)
-  const { activePreviewNodeId, setActivePreviewNodeId } = usePipelineStore()
+  const nodeOutputs = useExecutionStore(s => s.nodeOutputs)
+  const { activePreviewNodeId, setActivePreviewNodeId } = useUIStore()
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
   const output = nodeOutputs[id]

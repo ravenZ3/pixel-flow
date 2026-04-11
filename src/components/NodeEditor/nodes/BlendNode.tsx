@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useRef } from "react";
 import { Handle, Position, NodeProps } from "reactflow";
-import usePipelineStore from "@/store/pipelineStore";
+import useUIStore from "@/store/uiStore";
+import useExecutionStore from "@/store/executionStore";
 import { Slider } from "@/components/ui/slider";
 import {
   Select,
@@ -13,7 +14,7 @@ import NodeWrapper from "./NodeWrapper";
 import { handleRow } from "./handleStyles";
 
 function BlendNode({ id, data, selected }: NodeProps) {
-  const updateNodeData = usePipelineStore((s) => s.updateNodeData);
+  const updateNodeData = useUIStore((s) => s.updateNodeData);
 
   const mode = data.mode ?? "normal";
   const opacity = data.opacity ?? 1.0;
@@ -25,7 +26,7 @@ function BlendNode({ id, data, selected }: NodeProps) {
     [id, updateNodeData]
   );
 
-  const nodeOutputs = usePipelineStore((s) => s.nodeOutputs);
+  const nodeOutputs = useExecutionStore((s) => s.nodeOutputs);
   const outputImage = nodeOutputs[id]?.["image:output"] as ImageBitmap | undefined;
   const canvasRef = useRef<HTMLCanvasElement>(null);
 

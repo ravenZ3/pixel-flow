@@ -12,7 +12,8 @@ import ReactFlow, {
 } from "reactflow";
 import "reactflow/dist/style.css";
 
-import usePipelineStore from "@/store/pipelineStore";
+import useUIStore from "@/store/uiStore";
+import useExecutionStore from "@/store/executionStore";
 import ImageInputNode from "./nodes/ImageInputNode";
 import OutputNode from "./nodes/OutputNode";
 import ColorNode from "./nodes/ColorNode";
@@ -41,14 +42,13 @@ function getNextId() {
 }
 
 function NodeEditorInner() {
-  const nodes = usePipelineStore((s) => s.nodes);
-  const edges = usePipelineStore((s) => s.edges);
-  const onNodesChange = usePipelineStore((s) => s.onNodesChange);
-  const onEdgesChange = usePipelineStore((s) => s.onEdgesChange);
-  const onConnect = usePipelineStore((s) => s.onConnect);
-  const addNode = usePipelineStore((s) => s.addNode);
-  const markAllDirty = usePipelineStore((s) => s.markAllDirty);
-  const executePipeline = usePipelineStore((s) => s.executePipeline);
+  const nodes = useUIStore((s) => s.nodes);
+  const edges = useUIStore((s) => s.edges);
+  const onNodesChange = useUIStore((s) => s.onNodesChange);
+  const onEdgesChange = useUIStore((s) => s.onEdgesChange);
+  const onConnect = useUIStore((s) => s.onConnect);
+  const addNode = useUIStore((s) => s.addNode);
+  const markAllDirty = useExecutionStore((s) => s.markAllDirty);
 
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const reactFlowInstance = useRef<ReactFlowInstance | null>(null);
@@ -110,9 +110,8 @@ function NodeEditorInner() {
       return t;
     };
 
-    // Special case: image:output can connect to mask:input
-    // (used for Canny edge -> MaskNode external mask)
-    if (sourceHandle === "image:output" && targetHandle === "mask:input") {
+    // image:output can connect to mask:input and base:input
+    if (sourceHandle === "image:output" && (targetHandle === "mask:input" || targetHandle === "base:input")) {
       return true;
     }
 

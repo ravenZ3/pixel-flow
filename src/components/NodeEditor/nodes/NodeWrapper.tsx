@@ -1,7 +1,7 @@
 import { memo, useCallback, ReactNode } from 'react'
 import { useReactFlow } from 'reactflow'
 import { tv } from 'tailwind-variants'
-import usePipelineStore from '@/store/pipelineStore'
+import useUIStore from '@/store/uiStore'
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
@@ -85,7 +85,7 @@ interface NodeWrapperProps {
 
 function NodeWrapper({ id, label, selected, intent = 'pink', badge, children }: NodeWrapperProps) {
   const { setNodes, setEdges } = useReactFlow()
-  const { activePreviewNodeId, setActivePreviewNodeId } = usePipelineStore()
+  const { activePreviewNodeId, setActivePreviewNodeId } = useUIStore()
 
   const deleteNode = useCallback(() => {
     setNodes(nds => nds.filter(n => n.id !== id))

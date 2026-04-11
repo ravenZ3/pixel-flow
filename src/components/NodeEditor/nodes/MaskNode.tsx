@@ -1,14 +1,15 @@
 import { memo, useCallback, useRef, useEffect } from "react";
 import { Handle, Position, NodeProps, useEdges } from "reactflow";
-import usePipelineStore from "@/store/pipelineStore";
+import useUIStore from "@/store/uiStore";
+import useExecutionStore from "@/store/executionStore";
 import { Slider } from "@/components/ui/slider";
 import NodeWrapper from "./NodeWrapper";
 import { handleRow } from "./handleStyles";
 
 function MaskNode({ id, data, selected }: NodeProps) {
-  const updateNodeData = usePipelineStore((s) => s.updateNodeData);
-  const executePipeline = usePipelineStore((s) => s.executePipeline);
-  const nodeOutputs = usePipelineStore((s) => s.nodeOutputs);
+  const updateNodeData = useUIStore((s) => s.updateNodeData);
+  const executePipeline = useExecutionStore((s) => s.executePipeline);
+  const nodeOutputs = useExecutionStore((s) => s.nodeOutputs);
   const edges = useEdges();
 
   const tool = data.tool ?? 'brush';
@@ -76,15 +77,16 @@ function MaskNode({ id, data, selected }: NodeProps) {
     }
 
     // 3. We have an external mask and nothing drawn yet
-    if (data.externalMask instanceof ImageBitmap && !hasLoadedSomething.current) {
+    const currentExternalMask = nodeOutputs[id]?.externalMask as ImageBitmap | null;
+    if (currentExternalMask instanceof ImageBitmap && !hasLoadedSomething.current) {
       ctx.fillStyle = "#000000";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(data.externalMask, 0, 0, canvas.width, canvas.height);
+      ctx.drawImage(currentExternalMask, 0, 0, canvas.width, canvas.height);
       hasLoadedSomething.current = true;
       // Export it as our starting internal mask
       exportMaskAndExecute();
     }
-  }, [data.mask, data.externalMask]); // Re-sync if store data changes
+  }, [data.mask, nodeOutputs[id]?.externalMask]); // Re-sync if store data changes
 
   // Draw reference image on background layer
   useEffect(() => {
@@ -153,8 +155,6 @@ function MaskNode({ id, data, selected }: NodeProps) {
     ctx.lineTo(x, y);
     ctx.stroke();
 
-    // Export on every move for live update
-    exportMaskAndExecute();
   };
 
   const clearMask = () => {
@@ -171,7 +171,7 @@ function MaskNode({ id, data, selected }: NodeProps) {
   };
 
   const resetToExternal = () => {
-    const externalMask = data.externalMask as ImageBitmap | null;
+    const externalMask = nodeOutputs[id]?.externalMask as ImageBitmap | null;
     if (!externalMask || !maskCanvasRef.current) return;
     const canvas = maskCanvasRef.current;
     const ctx = canvas.getContext("2d");

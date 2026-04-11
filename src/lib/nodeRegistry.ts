@@ -145,10 +145,10 @@ const nodeRegistry: Record<string, NodeExecutor> = {
       ctx.drawImage(a, 0, 0);
       const idA = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
-      const canvasB = new OffscreenCanvas(b.width, b.height);
+      const canvasB = new OffscreenCanvas(a.width, a.height);
       const ctxB = canvasB.getContext("2d") as OffscreenCanvasRenderingContext2D;
-      ctxB.drawImage(b, 0, 0);
-      const idB = ctxB.getImageData(0, 0, canvasB.width, canvasB.height);
+      ctxB.drawImage(b, 0, 0, a.width, a.height);
+      const idB = ctxB.getImageData(0, 0, a.width, a.height);
 
       const dataA = idA.data;
       const dataB = idB.data;
@@ -188,31 +188,19 @@ const nodeRegistry: Record<string, NodeExecutor> = {
   },
   Mask: {
     execute: async (inputs, nodeData) => {
-      const image = inputs['image:input']
-      const externalMask = inputs['mask:input']
-      const drawnMask = (nodeData?.mask as ImageBitmap | null) ?? null
+      const image = inputs['image:input'];
+      const externalMask = inputs['mask:input'];
+      const drawnMask = (nodeData?.mask as ImageBitmap | null) ?? null;
 
       if (!(image instanceof ImageBitmap)) {
-        return { 'image:output': null, 'mask:output': null, 'inputImage': null }
-      }
-
-      // Store external mask in node data so the component can load it onto canvas
-      if (externalMask instanceof ImageBitmap) {
-        const currentExternal = nodeData?.externalMask
-        if (currentExternal !== externalMask) {
-          return {
-            'image:output': image,
-            'mask:output': drawnMask ?? externalMask,
-            'inputImage': image,
-            '_updateNodeData': { externalMask }
-          }
-        }
+        return { 'image:output': null, 'mask:output': null, 'inputImage': null };
       }
 
       return {
         'image:output': image,
-        'mask:output': drawnMask,
+        'mask:output': drawnMask ?? (externalMask instanceof ImageBitmap ? externalMask : null),
         'inputImage': image,
+        'externalMask': externalMask instanceof ImageBitmap ? externalMask : null,
       };
     },
   },
@@ -328,6 +316,7 @@ const nodeRegistry: Record<string, NodeExecutor> = {
     execute: async (inputs, nodeData) => {
       const src = inputs['image:input']
       const mask = inputs['mask:input']
+      const baseImage = inputs['base:input']
 
       if (!(src instanceof ImageBitmap)) return { 'image:output': null }
 
@@ -337,40 +326,172 @@ const nodeRegistry: Record<string, NodeExecutor> = {
       const bgMode = nodeData?.bgMode ?? 'dark'
       const colorMode = nodeData?.colorMode ?? 'original'
       const maskThreshold = nodeData?.maskThreshold ?? 30
+      const glowAmount = nodeData?.glowAmount ?? 0
+      const glowColor = nodeData?.glowColor ?? '#00ffcc'
 
       const charSets: Record<string, string[]> = {
-        classic: ['@', '#', 'S', '%', '?', '*', '+', ';', ':', ',', ' '],
+        classic: ['@', '#', 'S', '%', '?', '*', '+', ';', ':', ',', '.', ' '],
         blocks: ['█', '▓', '▒', '░', ' '],
-        minimal: ['@', '+', ' '],
+        minimal: ['@', '+', '.', ' '],
         braille: ['⣿', '⣷', '⣯', '⣟', '⡿', '⢿', '⣻', '⣽', ' '],
+        dense: ['$', '@', 'B', '%', '8', '&', 'W', 'M', '#', '*', 'o', 'a', 'h', 'k', 'b', 'd', 'p', 'q', 'w', 'm', 'Z', '0', 'O', 'L', 'C', 'J', 'U', 'Y', 'X', 'z', 'c', 'v', 'u', 'n', 'x', 'r', 'j', 'f', 't', '/', '|', '(', ')', '1', '{', '}', '[', ']', '?', '-', '_', '+', '~', '<', '>', 'i', '!', 'l', 'I', ';', ':', ',', '"', '^', '`', "'", '.', ' '],
       }
       const chars = charSets[charSet] ?? charSets.classic
 
       const { width, height } = src
+      const colorSource = baseImage instanceof ImageBitmap ? baseImage : src
 
-      // Sample source image once
       const sampleCanvas = new OffscreenCanvas(width, height)
-      const sampleCtx = sampleCanvas.getContext('2d') as OffscreenCanvasRenderingContext2D
-      sampleCtx.drawImage(src, 0, 0)
-      const fullImageData = sampleCtx.getImageData(0, 0, width, height)
-      const data = fullImageData.data
+      const sampleCtx = sampleCanvas.getContext('2d', { willReadFrequently: true }) as OffscreenCanvasRenderingContext2D
+      sampleCtx.drawImage(colorSource, 0, 0, width, height)
+      const colorData = sampleCtx.getImageData(0, 0, width, height).data
 
-      // Sample mask once (if connected)
+      let densityData = colorData
+      if (baseImage instanceof ImageBitmap) {
+        const densityCanvas = new OffscreenCanvas(width, height)
+        const densityCtx = densityCanvas.getContext('2d', { willReadFrequently: true }) as OffscreenCanvasRenderingContext2D
+        densityCtx.drawImage(src, 0, 0, width, height)
+        densityData = densityCtx.getImageData(0, 0, width, height).data
+      }
+
       let maskData: Uint8ClampedArray | null = null
       if (mask instanceof ImageBitmap) {
         const maskCanvas = new OffscreenCanvas(width, height)
-        const maskCtx = maskCanvas.getContext('2d') as OffscreenCanvasRenderingContext2D
-        maskCtx.drawImage(mask, 0, 0, width, height) // scale mask to image size
+        const maskCtx = maskCanvas.getContext('2d', { willReadFrequently: true }) as OffscreenCanvasRenderingContext2D
+        maskCtx.drawImage(mask, 0, 0, width, height)
         maskData = maskCtx.getImageData(0, 0, width, height).data
       }
 
-      const cols = Math.floor(width / fontSize)
-      const rows = Math.floor(height / (fontSize * 1.8))
+      const charWidth = Math.max(1, fontSize * 0.6);
+      const charHeight = Math.max(1, fontSize * 1.0);
 
+      const cols = Math.floor(width / charWidth);
+      const rows = Math.floor(height / charHeight);
+
+      // Render the text onto a TRANSPARENT layer first to avoid N iterations of shadow calculations
+      const textCanvas = new OffscreenCanvas(width, height)
+      const textCtx = textCanvas.getContext('2d') as OffscreenCanvasRenderingContext2D
+      textCtx.font = `bold ${fontSize}px "Courier New", monospace`
+      textCtx.textBaseline = 'top'
+
+      const cellW = width / cols
+      const cellH = height / rows
+
+      let lastStyle = ''
+      
+      // Preset solid style to avoid checking in loop if possible
+      let solidStyle = '';
+      if (colorMode === 'solid') {
+        solidStyle = bgMode === 'light' ? '#000000' : '#ffffff';
+        textCtx.fillStyle = solidStyle;
+        lastStyle = solidStyle;
+      }
+
+      for (let row = 0; row < rows; row++) {
+        for (let col = 0; col < cols; col++) {
+          const startX = Math.floor(col * cellW)
+          const startY = Math.floor(row * cellH)
+          let endX = Math.floor((col + 1) * cellW)
+          let endY = Math.floor((row + 1) * cellH)
+          if (endX > width) endX = width
+          if (endY > height) endY = height
+
+          // Sample at least 9 points per cell (or more if cells are small) to never miss an edge
+          const sampleStep = Math.max(1, Math.floor(Math.min(cellW, cellH) / 3))
+
+          let maxMask = 0
+          let sumLuma = 0
+          let sumCr = 0, sumCg = 0, sumCb = 0
+          let count = 0
+
+          for (let y = startY; y < endY; y += sampleStep) {
+            for (let x = startX; x < endX; x += sampleStep) {
+              const idx = (y * width + x) * 4
+
+              if (maskData) {
+                if (maskData[idx] > maxMask) maxMask = maskData[idx]
+              }
+
+              sumLuma += 0.299 * densityData[idx] + 0.587 * densityData[idx + 1] + 0.114 * densityData[idx + 2]
+
+              sumCr += colorData[idx]
+              sumCg += colorData[idx + 1]
+              sumCb += colorData[idx + 2]
+              count++
+            }
+          }
+
+          if (count === 0) continue
+
+          // Mask gate
+          if (maskData && maxMask < maskThreshold) continue
+
+          const avgLuma = sumLuma / count
+          let brightness = avgLuma / 255
+          if (invert) brightness = 1 - brightness
+
+          const charIndex = Math.min(chars.length - 1, Math.floor((1 - brightness) * chars.length))
+          const char = chars[charIndex]
+          if (!char || char === ' ') continue
+
+          // Average color of the cell
+          const cr = Math.round(sumCr / count)
+          const cg = Math.round(sumCg / count)
+          const cb = Math.round(sumCb / count)
+
+          if (colorMode !== 'solid') {
+            let style = ''
+            switch (colorMode) {
+              case 'grayscale': {
+                const gray = Math.floor((0.299 * cr + 0.587 * cg + 0.114 * cb))
+                style = `rgb(${gray},${gray},${gray})`
+                break
+              }
+              case 'matrix': {
+                const v = Math.floor(brightness * 255)
+                style = `rgb(0,${Math.max(40, v)},${Math.floor(v * 0.3)})`
+                break
+              }
+              case 'neon': {
+                style = brightness > 0.5
+                  ? `rgb(${Math.floor(brightness * 80)},${Math.floor(brightness * 255)},${Math.floor(brightness * 255)})`
+                  : `rgb(${Math.floor((1 - brightness) * 255)},0,${Math.floor(brightness * 200)})`
+                break
+              }
+              case 'cyberpunk': {
+                const t = brightness
+                style = `rgb(${Math.floor(255 * t + 200 * (1 - t))},${Math.floor(200 * t)},${Math.floor(255 * (1 - t))})`
+                break
+              }
+              case 'fire': {
+                const t = brightness
+                style = t < 0.33
+                  ? `rgb(${Math.floor(t * 3 * 200)},0,0)`
+                  : t < 0.66
+                    ? `rgb(200,${Math.floor((t - 0.33) * 3 * 150)},0)`
+                    : `rgb(255,${Math.floor((t - 0.66) * 3 * 255)},0)`
+                break
+              }
+              default:
+                style = bgMode === 'light'
+                  ? `rgb(${255 - cr},${255 - cg},${255 - cb})`
+                  : `rgb(${cr},${cg},${cb})`
+            }
+
+            if (style !== lastStyle) {
+              textCtx.fillStyle = style
+              lastStyle = style
+            }
+          }
+
+          textCtx.fillText(char, startX, startY)
+        }
+      }
+
+      // Finally composite everything to an output canvas
       const outCanvas = new OffscreenCanvas(width, height)
       const outCtx = outCanvas.getContext('2d') as OffscreenCanvasRenderingContext2D
 
-      // Background
       if (bgMode === 'dark') {
         outCtx.fillStyle = '#0a0a0a'
         outCtx.fillRect(0, 0, width, height)
@@ -378,63 +499,21 @@ const nodeRegistry: Record<string, NodeExecutor> = {
         outCtx.fillStyle = '#f5f5f5'
         outCtx.fillRect(0, 0, width, height)
       }
-      // transparent: no fill
 
-      outCtx.font = `${fontSize}px "Courier New", monospace`
-      outCtx.textBaseline = 'top'
-
-      const cellW = width / cols
-      const cellH = height / rows
-
-      for (let row = 0; row < rows; row++) {
-        for (let col = 0; col < cols; col++) {
-          // Sample center of cell
-          const px = Math.floor(col * cellW + cellW / 2)
-          const py = Math.floor(row * cellH + cellH / 2)
-
-          if (px >= width || py >= height) continue
-
-          // Check mask at cell center — skip character if below threshold
-          if (maskData) {
-            const maskIdx = (py * width + px) * 4
-            const maskBrightness = maskData[maskIdx] // 0-255
-            if (maskBrightness < maskThreshold) continue // skip this cell
-          }
-
-          // Sample image at cell center
-          const idx = (py * width + px) * 4
-          const r = data[idx]
-          const g = data[idx + 1]
-          const b = data[idx + 2]
-          let brightness = (r + g + b) / 3 / 255
-
-          if (invert) brightness = 1 - brightness
-
-          const charIndex = Math.floor((1 - brightness) * (chars.length - 1))
-          const char = chars[charIndex]
-
-          // Character color
-          if (colorMode === 'solid') {
-            outCtx.fillStyle = bgMode === 'light' ? '#000000' : '#ffffff'
-          } else if (colorMode === 'grayscale') {
-            const gray = Math.floor(brightness * 255)
-            outCtx.fillStyle = `rgb(${gray},${gray},${gray})`
-          } else {
-            // original color mode
-            if (bgMode === 'light') {
-              outCtx.fillStyle = `rgb(${255 - r},${255 - g},${255 - b})`
-            } else {
-              outCtx.fillStyle = `rgb(${r},${g},${b})`
-            }
-          }
-
-          outCtx.fillText(char, col * cellW, row * cellH)
-        }
+      // Blitting text with hardware-accelerated drop shadow applies it once across the screen
+      // Instead of 50,000 sub-renders
+      if (glowAmount > 0) {
+        outCtx.shadowBlur = glowAmount
+        outCtx.shadowColor = glowColor
+        // Because text canvas is transparent, drawing it naturally casts the correct shadow map
+        outCtx.drawImage(textCanvas, 0, 0)
+        outCtx.shadowBlur = 0
+      } else {
+        outCtx.drawImage(textCanvas, 0, 0)
       }
 
       return { 'image:output': outCanvas.transferToImageBitmap() }
     },
-
   },
   Prompt: {
     execute: async (inputs, nodeData) => {

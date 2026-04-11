@@ -2,13 +2,14 @@
 
 import { memo, useCallback, useRef, useEffect } from "react";
 import { Handle, Position, NodeProps } from "reactflow";
-import usePipelineStore from "@/store/pipelineStore";
+import useUIStore from "@/store/uiStore";
+import useExecutionStore from "@/store/executionStore";
 import NodeWrapper from "./NodeWrapper";
 
 import { handleRow } from "./handleStyles";
 
 function ImageInputNode({ id, data, selected }: NodeProps) {
-  const updateNodeData = usePipelineStore((s) => s.updateNodeData);
+  const updateNodeData = useUIStore((s) => s.updateNodeData);
   const fileRef = useRef<HTMLInputElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
