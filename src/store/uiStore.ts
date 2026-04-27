@@ -30,7 +30,19 @@ interface UIStore {
   setMaskOverlayOpacity: (opacity: number) => void;
   saveTemplate: (name: string) => void;
   loadTemplate: (name: string) => void;
+  applyPatch: (patch: GraphPatch) => { addedIds: string[] };
 }
+
+export interface GraphPatch {
+  add_nodes?: { id?: string; type: string; position?: { x: number; y: number }; data?: Record<string, unknown> }[];
+  remove_nodes?: string[];
+  add_edges?: { id?: string; source: string; sourceHandle: string; target: string; targetHandle: string }[];
+  remove_edges?: string[];
+  set_params?: { node_id: string; data: Record<string, unknown> }[];
+}
+
+let patchIdCounter = 0;
+const nextPatchId = () => `agent_${++patchIdCounter}_${Date.now()}`;
 
 const useUIStore = create<UIStore>((set, get) => ({
   nodes: [],
@@ -112,6 +124,65 @@ const useUIStore = create<UIStore>((set, get) => ({
     });
     const template = { nodes: cleanNodes, edges, name };
     localStorage.setItem(`pixel-flow-template-${name}`, JSON.stringify(template));
+  },
+
+  applyPatch: (patch: GraphPatch) => {
+    const { nodes, edges } = get();
+    const addedIds: string[] = [];
+
+    let nextNodes = nodes;
+    let nextEdges = edges;
+
+    if (patch.remove_edges?.length) {
+      const set = new Set(patch.remove_edges);
+      nextEdges = nextEdges.filter((e) => !set.has(e.id));
+    }
+
+    if (patch.remove_nodes?.length) {
+      const set = new Set(patch.remove_nodes);
+      nextNodes = nextNodes.filter((n) => !set.has(n.id));
+      nextEdges = nextEdges.filter((e) => !set.has(e.source) && !set.has(e.target));
+    }
+
+    if (patch.add_nodes?.length) {
+      const added: Node[] = patch.add_nodes.map((n, i) => {
+        const id = n.id ?? nextPatchId();
+        addedIds.push(id);
+        return {
+          id,
+          type: n.type,
+          position: n.position ?? { x: 80 + i * 260, y: 80 + (i % 2) * 160 },
+          data: n.data ?? {},
+        };
+      });
+      nextNodes = [...nextNodes, ...added];
+    }
+
+    if (patch.add_edges?.length) {
+      const added: Edge[] = patch.add_edges.map((e) => ({
+        id: e.id ?? nextPatchId(),
+        source: e.source,
+        sourceHandle: e.sourceHandle,
+        target: e.target,
+        targetHandle: e.targetHandle,
+      }));
+      nextEdges = [...nextEdges, ...added];
+    }
+
+    if (patch.set_params?.length) {
+      const byId = new Map(patch.set_params.map((p) => [p.node_id, p.data]));
+      nextNodes = nextNodes.map((n) =>
+        byId.has(n.id) ? { ...n, data: { ...n.data, ...byId.get(n.id) } } : n
+      );
+    }
+
+    set({ nodes: nextNodes, edges: nextEdges });
+
+    const exec = useExecutionStore.getState();
+    exec.markAllDirty();
+    exec.requestExecution();
+
+    return { addedIds };
   },
 
   loadTemplate: (name: string) => {

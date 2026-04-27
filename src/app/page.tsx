@@ -4,6 +4,7 @@ import { useState, useCallback, useRef } from "react";
 import dynamic from "next/dynamic";
 import Sidebar from "@/components/Sidebar";
 import ImageCanvas from "@/components/ImageCanvas";
+import ChatPanel from "@/components/ChatPanel";
 
 const NodeEditor = dynamic(() => import("@/components/NodeEditor"), {
   ssr: false,
@@ -53,8 +54,9 @@ export default function Home() {
       </div>
 
       {/* Node Editor */}
-      <div className="flex-1 min-w-0 bg-[#0f0f0f]">
+      <div className="flex-1 min-w-0 bg-[#0f0f0f] relative">
         <NodeEditor />
+        <ChatPanel />
       </div>
 
       {/* Resize handle */}
