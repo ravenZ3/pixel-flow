@@ -14,6 +14,7 @@ import "reactflow/dist/style.css";
 
 import useUIStore from "@/store/uiStore";
 import useExecutionStore from "@/store/executionStore";
+import { readGraphFromHash, clearGraphHash } from "@/lib/share";
 import ImageInputNode from "./nodes/ImageInputNode";
 import OutputNode from "./nodes/OutputNode";
 import ColorNode from "./nodes/ColorNode";
@@ -23,6 +24,13 @@ import BlendNode from "./nodes/BlendNode";
 import CannyEdgeNode from "./nodes/CannyEdgeNode";
 import ASCIINode from "./nodes/ASCIINode";
 import PromptInputNode from "./nodes/PromptInputNode";
+import SolidFillNode from "./nodes/SolidFillNode";
+import GradientMapNode from "./nodes/GradientMapNode";
+import PosterizeNode from "./nodes/PosterizeNode";
+import CurvesNode from "./nodes/CurvesNode";
+import SplitToningNode from "./nodes/SplitToningNode";
+import VignetteNode from "./nodes/VignetteNode";
+import GrainNode from "./nodes/GrainNode";
 
 const nodeTypes = {
   ImageInput: ImageInputNode,
@@ -34,6 +42,13 @@ const nodeTypes = {
   CannyEdge: CannyEdgeNode,
   ASCII: ASCIINode,
   Prompt: PromptInputNode,
+  SolidFill: SolidFillNode,
+  GradientMap: GradientMapNode,
+  Posterize: PosterizeNode,
+  Curves: CurvesNode,
+  SplitToning: SplitToningNode,
+  Vignette: VignetteNode,
+  Grain: GrainNode,
 };
 
 let nodeIdCounter = 0;
@@ -58,6 +73,14 @@ function NodeEditorInner() {
   }, []);
 
   useEffect(() => {
+    // Hydrate from a shared URL hash on first mount, then clean the hash so it
+    // doesn't keep re-applying on save/template/etc.
+    const shared = readGraphFromHash();
+    if (shared) {
+      useUIStore.getState().setNodes(shared.nodes);
+      useUIStore.getState().setEdges(shared.edges);
+      clearGraphHash();
+    }
     markAllDirty();
   }, [markAllDirty]);
 
@@ -118,8 +141,28 @@ function NodeEditorInner() {
     return normalize(sourceType) === normalize(targetType);
   }, []);
 
+  const isEmpty = nodes.length === 0;
+
   return (
-    <div ref={reactFlowWrapper} className="h-full w-full">
+    <div ref={reactFlowWrapper} className="h-full w-full relative">
+      {isEmpty && (
+        <div className="absolute inset-0 z-10 pointer-events-none flex items-center justify-center">
+          <div className="text-center max-w-sm px-6">
+            <div className="text-zinc-600 text-sm font-mono uppercase tracking-widest mb-3">
+              empty canvas
+            </div>
+            <div className="text-zinc-400 text-base mb-2">
+              Drag a node from the left, or
+            </div>
+            <div className="text-zinc-400 text-base">
+              ask the <span className="text-cyan-400">Agent</span> to build a pipeline.
+            </div>
+            <div className="mt-6 text-zinc-600 text-xs">
+              Try: <span className="text-zinc-400 italic">&quot;ASCII art with neon glow&quot;</span>
+            </div>
+          </div>
+        </div>
+      )}
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -138,12 +181,17 @@ function NodeEditorInner() {
         deleteKeyCode="Backspace"
         className="bg-[#0f0f0f]"
       >
-        <Controls className="react-flow-controls" />
-        <MiniMap
-          nodeColor="#1c1c1c1c"
-          maskColor="rgba(0,0,0,0.7)"
-          className="react-flow-minimap"
-        />
+        <Controls className="react-flow-controls" position="bottom-left" />
+        {nodes.length > 3 && (
+          <MiniMap
+            nodeColor="#1c1c1c1c"
+            maskColor="rgba(0,0,0,0.7)"
+            className="react-flow-minimap"
+            position="top-right"
+            pannable
+            zoomable
+          />
+        )}
         <Background
           variant={BackgroundVariant.Dots}
           gap={20}

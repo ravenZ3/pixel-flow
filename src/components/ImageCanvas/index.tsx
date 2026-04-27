@@ -1,9 +1,36 @@
 "use client";
 
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, useState } from "react";
 import useUIStore from "@/store/uiStore";
 import useExecutionStore from "@/store/executionStore";
 import { Slider } from "@/components/ui/slider";
+
+// Halve the source repeatedly until it's within 2x of the target, then return the
+// final canvas. Each halving uses a smooth bilinear average which acts as a low-pass
+// filter — this is what prevents moire/rainbow bands when downscaling dense content.
+function pyramidDownscale(src: ImageBitmap, targetW: number, targetH: number): OffscreenCanvas | ImageBitmap {
+  let curW = src.width;
+  let curH = src.height;
+  // If we're already close to target (or upscaling), no pyramid needed.
+  if (curW <= targetW * 2 && curH <= targetH * 2) {
+    return src;
+  }
+
+  let cur: OffscreenCanvas | ImageBitmap = src;
+  while (curW > targetW * 2 && curH > targetH * 2) {
+    const nextW = Math.max(targetW, Math.floor(curW / 2));
+    const nextH = Math.max(targetH, Math.floor(curH / 2));
+    const next = new OffscreenCanvas(nextW, nextH);
+    const nctx = next.getContext("2d")!;
+    nctx.imageSmoothingEnabled = true;
+    nctx.imageSmoothingQuality = "high";
+    nctx.drawImage(cur, 0, 0, nextW, nextH);
+    cur = next;
+    curW = nextW;
+    curH = nextH;
+  }
+  return cur;
+}
 
 export default function ImageCanvas() {
   const nodeOutputs = useExecutionStore((s) => s.nodeOutputs);
@@ -14,6 +41,8 @@ export default function ImageCanvas() {
   const setShowMask = useUIStore((s) => s.setShowMask);
   const setMaskOverlayOpacity = useUIStore((s) => s.setMaskOverlayOpacity);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [containerSize, setContainerSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
 
   // Get both image and mask from the active output node
   const outputData = activePreviewNodeId ? nodeOutputs[activePreviewNodeId] : null;
@@ -22,44 +51,72 @@ export default function ImageCanvas() {
 
   const isMaskConnected = !!maskBitmap;
 
+  // Track container size so we can render the canvas at display resolution (avoids browser's
+  // low-quality bilinear downscale that turns high-frequency content like ASCII into moire stripes).
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver((entries) => {
+      const r = entries[0].contentRect;
+      setContainerSize({ w: r.width, h: r.height });
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || !imageBitmap) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    // Step 1 — set canvas resolution
-    canvas.width = imageBitmap.width;
-    canvas.height = imageBitmap.height;
+    // Compute display size that fits the container while preserving aspect ratio.
+    // Account for devicePixelRatio so retina screens stay crisp.
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const cw = Math.max(1, containerSize.w);
+    const ch = Math.max(1, containerSize.h);
+    const scale = Math.min(cw / imageBitmap.width, ch / imageBitmap.height, 1);
+    const displayW = Math.max(1, Math.round(imageBitmap.width * scale));
+    const displayH = Math.max(1, Math.round(imageBitmap.height * scale));
+    const targetW = Math.max(1, Math.round(displayW * dpr));
+    const targetH = Math.max(1, Math.round(displayH * dpr));
 
-    // Step 2 — draw the base image
-    ctx.drawImage(imageBitmap, 0, 0);
+    canvas.width = targetW;
+    canvas.height = targetH;
+    canvas.style.width = `${displayW}px`;
+    canvas.style.height = `${displayH}px`;
 
-    // Step 3 — draw mask overlay if enabled
+    // Pyramid downscale: halve the source repeatedly until within 2x of the target,
+    // then a final smooth draw. This is what proper image viewers (Photoshop) do
+    // and avoids the rainbow-band aliasing bilinear gives on dense content.
+    const downscaled = pyramidDownscale(imageBitmap, targetW, targetH);
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    ctx.clearRect(0, 0, targetW, targetH);
+    ctx.drawImage(downscaled, 0, 0, targetW, targetH);
+
+    // Mask overlay (drawn at display res, also benefits from the smoother downscale)
     if (showMask && maskBitmap) {
-      // draw mask into a temp canvas to get pixel data
-      const tempCanvas = new OffscreenCanvas(canvas.width, canvas.height);
-      const tempCtx = tempCanvas.getContext("2d")!;
-      tempCtx.drawImage(maskBitmap, 0, 0, canvas.width, canvas.height);
-      const maskData = tempCtx.getImageData(0, 0, canvas.width, canvas.height);
+      const m = pyramidDownscale(maskBitmap, targetW, targetH);
+      const mc = new OffscreenCanvas(targetW, targetH);
+      const mctx = mc.getContext("2d")!;
+      mctx.drawImage(m, 0, 0, targetW, targetH);
+      const mdata = mctx.getImageData(0, 0, targetW, targetH);
 
-      // create red overlay using mask as alpha
-      const overlayData = ctx.createImageData(canvas.width, canvas.height);
-      for (let i = 0; i < maskData.data.length; i += 4) {
-        const maskValue = maskData.data[i] / 255; // white = 1, black = 0
-        overlayData.data[i] = 220; // R
-        overlayData.data[i + 1] = 40; // G
-        overlayData.data[i + 2] = 40; // B
-        overlayData.data[i + 3] = Math.round(maskValue * maskOverlayOpacity * 255);
+      const od = ctx.createImageData(targetW, targetH);
+      for (let i = 0; i < mdata.data.length; i += 4) {
+        const v = mdata.data[i] / 255;
+        od.data[i] = 220;
+        od.data[i + 1] = 40;
+        od.data[i + 2] = 40;
+        od.data[i + 3] = Math.round(v * maskOverlayOpacity * 255);
       }
-
-      // draw overlay on top of image
-      const overlayCanvas = new OffscreenCanvas(canvas.width, canvas.height);
-      const overlayCtx = overlayCanvas.getContext("2d")!;
-      overlayCtx.putImageData(overlayData, 0, 0);
-      ctx.drawImage(overlayCanvas, 0, 0);
+      const oc = new OffscreenCanvas(targetW, targetH);
+      const octx = oc.getContext("2d")!;
+      octx.putImageData(od, 0, 0);
+      ctx.drawImage(oc, 0, 0);
     }
-  }, [imageBitmap, maskBitmap, showMask, maskOverlayOpacity]);
+  }, [imageBitmap, maskBitmap, showMask, maskOverlayOpacity, containerSize]);
 
   return (
     <div className="flex flex-col h-full overflow-hidden bg-[#0a0a0a]">
@@ -78,13 +135,13 @@ export default function ImageCanvas() {
       </div>
 
       {/* Canvas area — fills remaining space */}
-      <div className="flex-1 relative overflow-hidden flex items-center justify-center p-4 dashboard-grid">
+      <div ref={containerRef} className="flex-1 relative overflow-hidden flex items-center justify-center p-4 dashboard-grid">
         {imageBitmap ? (
-          <div className="relative group max-w-full max-h-full">
+          <div className="relative group">
             <div className="absolute -inset-1 rounded-lg bg-gradient-to-r from-cyan-500/10 to-blue-500/10 opacity-0 group-hover:opacity-100 transition-opacity blur" />
             <canvas
               ref={canvasRef}
-              className="relative rounded-lg border border-zinc-800 shadow-2xl max-w-full max-h-full object-contain block"
+              className="relative rounded-lg border border-zinc-800 shadow-2xl block"
             />
           </div>
         ) : (
