@@ -1,15 +1,104 @@
 import { rgbToHsl, hslToRgb } from "./colorUtils";
 
+// Builds a 256-entry tone LUT from five slider values. blackPoint and whitePoint
+// move the endpoints (0..100, lift / clip). shadows/midtones/highlights nudge
+// interior anchors at x=64/128/192 (-100..+100). Piecewise linear, clamped.
+// Identity when all five are 0.
+export function buildToneLUT(
+  blackPoint: number,
+  shadows: number,
+  midtones: number,
+  highlights: number,
+  whitePoint: number
+): Uint8ClampedArray {
+  const SCALE = 0.5;
+  const points = [
+    { x: 0,   y: blackPoint * SCALE },               // 0..50 (lift the floor)
+    { x: 64,  y: 64  + shadows    * SCALE },
+    { x: 128, y: 128 + midtones   * SCALE },
+    { x: 192, y: 192 + highlights * SCALE },
+    { x: 255, y: 255 - whitePoint * SCALE },         // 255..205 (clip the ceiling)
+  ];
+  const lut = new Uint8ClampedArray(256);
+  for (let x = 0; x < 256; x++) {
+    let i = 0;
+    while (i < points.length - 1 && points[i + 1].x < x) i++;
+    const p0 = points[i];
+    const p1 = points[i + 1];
+    const t = p1.x === p0.x ? 0 : (x - p0.x) / (p1.x - p0.x);
+    lut[x] = Math.max(0, Math.min(255, Math.round(p0.y + t * (p1.y - p0.y))));
+  }
+  return lut;
+}
+
+// Hue (0..360) → unit RGB centered at 0.5, returned in [-0.5, +0.5] tint-vector form.
+// Used by Split Toning to push pixels toward a chromatic axis.
+function hueToTintVector(hue: number): { r: number; g: number; b: number } {
+  const h = ((hue % 360) + 360) % 360 / 60;
+  const i = Math.floor(h);
+  const f = h - i;
+  let r = 0, g = 0, b = 0;
+  switch (i) {
+    case 0: r = 1; g = f; b = 0; break;
+    case 1: r = 1 - f; g = 1; b = 0; break;
+    case 2: r = 0; g = 1; b = f; break;
+    case 3: r = 0; g = 1 - f; b = 1; break;
+    case 4: r = f; g = 0; b = 1; break;
+    case 5: r = 1; g = 0; b = 1 - f; break;
+  }
+  return { r: r - 0.5, g: g - 0.5, b: b - 0.5 };
+}
+
+// Deterministic 32-bit PRNG. Same seed → same noise. Used for film grain so the
+// pattern doesn't shimmer between renders when an upstream parameter changes.
+function mulberry32(seed: number) {
+  let s = seed | 0;
+  return () => {
+    s = (s + 0x6d2b79f5) | 0;
+    let t = s;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function hexToRgb(hex: string): { r: number; g: number; b: number } {
+  const h = hex.replace("#", "").trim();
+  const v = h.length === 3
+    ? h.split("").map((c) => c + c).join("")
+    : h.padEnd(6, "0");
+  return {
+    r: parseInt(v.slice(0, 2), 16),
+    g: parseInt(v.slice(2, 4), 16),
+    b: parseInt(v.slice(4, 6), 16),
+  };
+}
+
 export type NodeOutputs = {
   [key: string]: ImageBitmap | string | null | undefined | Record<string, any>;
   _updateNodeData?: Record<string, any>;
 };
+
+export type ParamSchema =
+  | { type: "number"; min?: number; max?: number; step?: number; default: number; description: string }
+  | { type: "enum"; values: string[]; default: string; description: string }
+  | { type: "boolean"; default: boolean; description: string }
+  | { type: "string"; default: string; description: string }
+  | { type: "color"; default: string; description: string };
+
+export interface NodeSchema {
+  description: string;
+  inputs: { name: string; type: "image" | "mask" | "prompt"; required?: boolean; description?: string }[];
+  outputs: { name: string; type: "image" | "mask" | "prompt" }[];
+  params: Record<string, ParamSchema>;
+}
 
 export interface NodeExecutor {
   execute(
     inputs: Record<string, ImageBitmap | string | null>,
     nodeData?: Record<string, any>
   ): Promise<NodeOutputs>;
+  schema: NodeSchema;
 }
 
 const nodeRegistry: Record<string, NodeExecutor> = {
@@ -17,6 +106,12 @@ const nodeRegistry: Record<string, NodeExecutor> = {
     execute: async (inputs, nodeData) => ({
       'image:output': (nodeData?.uploadedImage as unknown as ImageBitmap) ?? null,
     }),
+    schema: {
+      description: "Source image. Holds the uploaded user image; every pipeline starts here.",
+      inputs: [],
+      outputs: [{ name: "image:output", type: "image" }],
+      params: {},
+    },
   },
   Color: {
     execute: async (inputs, nodeData) => {
@@ -29,7 +124,7 @@ const nodeRegistry: Record<string, NodeExecutor> = {
       const id = ctx.getImageData(0, 0, canvas.width, canvas.height);
       const data = id.data;
 
-      const brightness = (nodeData?.brightness ?? 0) / 100;
+      const brightness = (nodeData?.brightness ?? 0) / 200;
       const contrast = (nodeData?.contrast ?? 0) / 100;
       const gamma = nodeData?.gamma ?? 1.0;
       const saturation = (nodeData?.saturation ?? 0) / 100;
@@ -64,6 +159,18 @@ const nodeRegistry: Record<string, NodeExecutor> = {
 
       ctx.putImageData(id, 0, 0);
       return { 'image:output': canvas.transferToImageBitmap() };
+    },
+    schema: {
+      description: "Adjusts color properties: brightness, contrast, gamma, saturation, hue shift.",
+      inputs: [{ name: "image:input", type: "image", required: true }],
+      outputs: [{ name: "image:output", type: "image" }],
+      params: {
+        brightness: { type: "number", min: -100, max: 100, default: 0, description: "Brightness in percent, -100 to 100." },
+        contrast: { type: "number", min: -100, max: 100, default: 0, description: "Contrast in percent, -100 to 100." },
+        gamma: { type: "number", min: 0.1, max: 3, step: 0.05, default: 1.0, description: "Gamma correction. <1 darkens, >1 brightens." },
+        saturation: { type: "number", min: -100, max: 100, default: 0, description: "Saturation in percent, -100 is grayscale." },
+        hue: { type: "number", min: 0, max: 360, default: 0, description: "Hue shift in degrees." },
+      },
     },
   },
   Filter: {
@@ -127,6 +234,15 @@ const nodeRegistry: Record<string, NodeExecutor> = {
       ctx.putImageData(id, 0, 0);
       return { 'image:output': canvas.transferToImageBitmap() };
     },
+    schema: {
+      description: "Convolution filter. Gaussian blur, sharpen, edge-detect, or emboss.",
+      inputs: [{ name: "image:input", type: "image", required: true }],
+      outputs: [{ name: "image:output", type: "image" }],
+      params: {
+        filterType: { type: "enum", values: ["gaussian", "sharpen", "edge detect", "emboss"], default: "gaussian", description: "Which convolution to apply." },
+        strength: { type: "number", min: 0, max: 10, step: 0.1, default: 1, description: "Filter strength. For gaussian this is blur radius in px." },
+      },
+    },
   },
   Blend: {
     execute: async (inputs, nodeData) => {
@@ -185,6 +301,18 @@ const nodeRegistry: Record<string, NodeExecutor> = {
       ctx.putImageData(idA, 0, 0);
       return { 'image:output': canvas.transferToImageBitmap() };
     },
+    schema: {
+      description: "Composites two images with a blend mode. Output size matches imageA.",
+      inputs: [
+        { name: "imageA:input", type: "image", required: true, description: "Base layer." },
+        { name: "imageB:input", type: "image", required: true, description: "Layer blended on top." },
+      ],
+      outputs: [{ name: "image:output", type: "image" }],
+      params: {
+        mode: { type: "enum", values: ["normal", "multiply", "screen", "overlay", "darken", "lighten"], default: "normal", description: "Blend mode." },
+        opacity: { type: "number", min: 0, max: 1, step: 0.05, default: 1, description: "Opacity of the top layer." },
+      },
+    },
   },
   Mask: {
     execute: async (inputs, nodeData) => {
@@ -202,6 +330,18 @@ const nodeRegistry: Record<string, NodeExecutor> = {
         'inputImage': image,
         'externalMask': externalMask instanceof ImageBitmap ? externalMask : null,
       };
+    },
+    schema: {
+      description: "Holds a hand-drawn or incoming mask and passes both image and mask downstream. Connect a CannyEdge to mask:input to seed the mask with detected edges.",
+      inputs: [
+        { name: "image:input", type: "image", required: true },
+        { name: "mask:input", type: "mask", required: false, description: "Optional external mask to seed from." },
+      ],
+      outputs: [
+        { name: "image:output", type: "image" },
+        { name: "mask:output", type: "mask" },
+      ],
+      params: {},
     },
   },
   CannyEdge: {
@@ -310,7 +450,17 @@ const nodeRegistry: Record<string, NodeExecutor> = {
 
       ctx.putImageData(id, 0, 0)
       return { 'image:output': canvas.transferToImageBitmap() }
-    }
+    },
+    schema: {
+      description: "Canny edge detection. Outputs a high-contrast edge map (white edges on black).",
+      inputs: [{ name: "image:input", type: "image", required: true }],
+      outputs: [{ name: "image:output", type: "image" }],
+      params: {
+        lowThreshold: { type: "number", min: 0, max: 255, default: 20, description: "Lower hysteresis threshold." },
+        highThreshold: { type: "number", min: 0, max: 255, default: 80, description: "Upper hysteresis threshold. Higher = fewer edges." },
+        blurRadius: { type: "number", min: 0, max: 10, step: 0.5, default: 1, description: "Pre-blur radius to suppress noise." },
+      },
+    },
   },
   ASCII: {
     execute: async (inputs, nodeData) => {
@@ -514,6 +664,25 @@ const nodeRegistry: Record<string, NodeExecutor> = {
 
       return { 'image:output': outCanvas.transferToImageBitmap() }
     },
+    schema: {
+      description: "Converts image into character-based art. Use for stylized, terminal-aesthetic output.",
+      inputs: [
+        { name: "image:input", type: "image", required: true, description: "Source whose luminance picks which char to draw." },
+        { name: "mask:input", type: "mask", required: false, description: "Restrict ASCII to masked cells only." },
+        { name: "base:input", type: "image", required: false, description: "Optional separate image sampled for color." },
+      ],
+      outputs: [{ name: "image:output", type: "image" }],
+      params: {
+        fontSize: { type: "number", min: 4, max: 32, default: 8, description: "Character font size in px." },
+        charSet: { type: "enum", values: ["classic", "blocks", "minimal", "braille", "dense"], default: "classic", description: "Character ramp." },
+        invert: { type: "boolean", default: false, description: "Invert brightness-to-char mapping." },
+        bgMode: { type: "enum", values: ["dark", "light", "transparent"], default: "dark", description: "Background fill." },
+        colorMode: { type: "enum", values: ["original", "grayscale", "matrix", "neon", "cyberpunk", "fire", "solid"], default: "original", description: "Color treatment for rendered chars." },
+        maskThreshold: { type: "number", min: 0, max: 255, default: 30, description: "Mask value below this is skipped." },
+        glowAmount: { type: "number", min: 0, max: 40, default: 0, description: "Glow/drop-shadow blur in px." },
+        glowColor: { type: "color", default: "#00ffcc", description: "Glow color." },
+      },
+    },
   },
   Prompt: {
     execute: async (inputs, nodeData) => {
@@ -523,7 +692,337 @@ const nodeRegistry: Record<string, NodeExecutor> = {
           negative: nodeData?.negativePrompt || "",
         }
       }
-    }
+    },
+    schema: {
+      description: "Text prompt node. Emits a prompt value for downstream prompt-consuming nodes.",
+      inputs: [],
+      outputs: [{ name: "prompt", type: "prompt" }],
+      params: {
+        prompt: { type: "string", default: "", description: "Positive prompt text." },
+        negativePrompt: { type: "string", default: "", description: "Negative prompt text." },
+      },
+    },
+  },
+  Curves: {
+    execute: async (inputs, nodeData) => {
+      const src = inputs['image:input'];
+      if (!(src instanceof ImageBitmap)) return { 'image:output': null };
+
+      const get = (k: string) => Number((nodeData?.[k] as number) ?? 0);
+      const lutMaster = buildToneLUT(get('masterBlackPoint'), get('masterShadows'), get('masterMidtones'), get('masterHighlights'), get('masterWhitePoint'));
+      const lutR      = buildToneLUT(get('redBlackPoint'),    get('redShadows'),    get('redMidtones'),    get('redHighlights'),    get('redWhitePoint'));
+      const lutG      = buildToneLUT(get('greenBlackPoint'),  get('greenShadows'),  get('greenMidtones'),  get('greenHighlights'),  get('greenWhitePoint'));
+      const lutB      = buildToneLUT(get('blueBlackPoint'),   get('blueShadows'),   get('blueMidtones'),   get('blueHighlights'),   get('blueWhitePoint'));
+
+      const canvas = new OffscreenCanvas(src.width, src.height);
+      const ctx = canvas.getContext('2d') as OffscreenCanvasRenderingContext2D;
+      ctx.drawImage(src, 0, 0);
+      const id = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const d = id.data;
+
+      for (let i = 0; i < d.length; i += 4) {
+        // master first, then per-channel
+        d[i]     = lutR[lutMaster[d[i]]];
+        d[i + 1] = lutG[lutMaster[d[i + 1]]];
+        d[i + 2] = lutB[lutMaster[d[i + 2]]];
+      }
+      ctx.putImageData(id, 0, 0);
+      return { 'image:output': canvas.transferToImageBitmap() };
+    },
+    schema: {
+      description: "Tone curves — for TONAL adjustments (lift blacks, clip whites, contrast, brightness across tonal ranges). Five anchors per channel: BlackPoint at x=0 (0..100, lifts the floor — hazy faded-film look), Shadows at x=64, Midtones at x=128, Highlights at x=192, WhitePoint at x=255 (0..100, clips the ceiling — soft film highlights). Use Curves for TONE, use SplitToning for COLOR CAST — do not fake a color cast with per-channel Curves shifts; SplitToning is built for that and produces a much stronger result. Master values are the main lever; values under 20 are usually too subtle. Recipes (master only — pair with SplitToning for color): True Detective S1 (hazy lift): masterBlackPoint +40, masterWhitePoint +25, masterMidtones -10. Twilight: masterBlackPoint +20, masterWhitePoint +15, masterMidtones -10. Drive / Blade Runner: masterBlackPoint +25, masterWhitePoint +10, masterShadows -10, masterHighlights +15 (S-curve for contrast). Wes Anderson (pastel): masterBlackPoint +35, masterWhitePoint +25, masterMidtones +10. Nolan / IMAX: masterBlackPoint 0 (kept crushed), masterShadows -15, masterHighlights +10.",
+      inputs: [{ name: "image:input", type: "image", required: true }],
+      outputs: [{ name: "image:output", type: "image" }],
+      params: {
+        masterBlackPoint:    { type: "number", min: 0, max: 100, default: 0, description: "Master black-point lift (raises (0,0) up). The hazy / faded-film effect." },
+        masterShadows:       { type: "number", min: -100, max: 100, default: 0, description: "Master shadows (anchor at input=64)." },
+        masterMidtones:      { type: "number", min: -100, max: 100, default: 0, description: "Master midtones (anchor at input=128)." },
+        masterHighlights:    { type: "number", min: -100, max: 100, default: 0, description: "Master highlights (anchor at input=192)." },
+        masterWhitePoint:    { type: "number", min: 0, max: 100, default: 0, description: "Master white-point clip (lowers (255,255) down). Soft highlight rolloff." },
+        redBlackPoint:       { type: "number", min: 0, max: 100, default: 0, description: "Red shadows lift (warm haze in shadows)." },
+        redShadows:          { type: "number", min: -100, max: 100, default: 0, description: "Red shadows. Positive = warm shadows." },
+        redMidtones:         { type: "number", min: -100, max: 100, default: 0, description: "Red midtones." },
+        redHighlights:       { type: "number", min: -100, max: 100, default: 0, description: "Red highlights. Positive = warm/orange highlights." },
+        redWhitePoint:       { type: "number", min: 0, max: 100, default: 0, description: "Red highlight clip." },
+        greenBlackPoint:     { type: "number", min: 0, max: 100, default: 0, description: "Green shadows lift." },
+        greenShadows:        { type: "number", min: -100, max: 100, default: 0, description: "Green shadows. Positive = sickly/yellow-green shadows (True Detective)." },
+        greenMidtones:       { type: "number", min: -100, max: 100, default: 0, description: "Green midtones." },
+        greenHighlights:     { type: "number", min: -100, max: 100, default: 0, description: "Green highlights." },
+        greenWhitePoint:     { type: "number", min: 0, max: 100, default: 0, description: "Green highlight clip." },
+        blueBlackPoint:      { type: "number", min: 0, max: 100, default: 0, description: "Blue shadows lift (cool haze)." },
+        blueShadows:         { type: "number", min: -100, max: 100, default: 0, description: "Blue shadows. Positive = teal/cool shadows." },
+        blueMidtones:        { type: "number", min: -100, max: 100, default: 0, description: "Blue midtones." },
+        blueHighlights:      { type: "number", min: -100, max: 100, default: 0, description: "Blue highlights. Positive = cool highlights." },
+        blueWhitePoint:      { type: "number", min: 0, max: 100, default: 0, description: "Blue highlight clip." },
+      },
+    },
+  },
+  SplitToning: {
+    execute: async (inputs, nodeData) => {
+      const src = inputs['image:input'];
+      if (!(src instanceof ImageBitmap)) return { 'image:output': null };
+
+      const shadowsHue        = (nodeData?.shadowsHue        as number) ?? 220; // teal-ish
+      const shadowsSaturation = (nodeData?.shadowsSaturation as number) ?? 0;
+      const highlightsHue     = (nodeData?.highlightsHue     as number) ?? 30;  // amber-ish
+      const highlightsSaturation = (nodeData?.highlightsSaturation as number) ?? 0;
+      const balance           = (nodeData?.balance           as number) ?? 0;   // -100..+100
+
+      const sTint = hueToTintVector(shadowsHue);
+      const hTint = hueToTintVector(highlightsHue);
+      const sStrength = (shadowsSaturation / 100);
+      const hStrength = (highlightsSaturation / 100);
+      const SCALE = 96; // max push in 0..255 space at full saturation
+
+      // balance shifts the midpoint of "what counts as shadow vs highlight".
+      // balance = +50 means more pixels weight as highlight; -50 the opposite.
+      const mid = 0.5 - balance / 200;
+
+      const canvas = new OffscreenCanvas(src.width, src.height);
+      const ctx = canvas.getContext('2d') as OffscreenCanvasRenderingContext2D;
+      ctx.drawImage(src, 0, 0);
+      const id = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const d = id.data;
+
+      for (let i = 0; i < d.length; i += 4) {
+        const lum = (0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]) / 255;
+        // Two complementary weights, centered at `mid`. Smooth linear taper.
+        const sw = Math.max(0, mid - lum) / Math.max(0.001, mid);          // 1 at black, 0 above mid
+        const hw = Math.max(0, lum - mid) / Math.max(0.001, 1 - mid);      // 0 below mid, 1 at white
+
+        d[i]     += sTint.r * SCALE * sStrength * sw + hTint.r * SCALE * hStrength * hw;
+        d[i + 1] += sTint.g * SCALE * sStrength * sw + hTint.g * SCALE * hStrength * hw;
+        d[i + 2] += sTint.b * SCALE * sStrength * sw + hTint.b * SCALE * hStrength * hw;
+      }
+      ctx.putImageData(id, 0, 0);
+      return { 'image:output': canvas.transferToImageBitmap() };
+    },
+    schema: {
+      description: "Split Toning — tints shadows and highlights with different hues. ALWAYS USE THIS NODE WHENEVER A REQUESTED LOOK HAS A COLOR CAST OR NAMED MOOD (cinematic, film, retro, sepia, teal-and-orange, etc.). Do NOT try to fake color casts with per-channel Curves; SplitToning is built for exactly this and Curves with single-channel offsets undershoots dramatically. Recipes (commit to these — gentle values look invisible): True Detective S1 (yellow-green wash): shadowsHue 60, shadowsSaturation 55, highlightsHue 45, highlightsSaturation 40. Drive / Blade Runner 2049 (teal-and-orange): shadowsHue 200, shadowsSaturation 60, highlightsHue 30, highlightsSaturation 50. Twilight: shadowsHue 200, shadowsSaturation 45, highlightsHue 25, highlightsSaturation 35. Moonlight: shadowsHue 215, shadowsSaturation 65, highlightsHue 200, highlightsSaturation 30. Sepia: shadowsHue 30, shadowsSaturation 60, highlightsHue 45, highlightsSaturation 40. Cyanotype: shadowsHue 220, shadowsSaturation 75, highlightsHue 60, highlightsSaturation 30. Wes Anderson (pastel): shadowsHue 30, shadowsSaturation 25, highlightsHue 200, highlightsSaturation 20. Saturation 0 = no tint on that range. balance shifts the midpoint between shadow and highlight regions (positive = treat more pixels as highlights). Numbers under 30 are usually too subtle to register on screen.",
+      inputs: [{ name: "image:input", type: "image", required: true }],
+      outputs: [{ name: "image:output", type: "image" }],
+      params: {
+        shadowsHue:        { type: "number", min: 0, max: 360, default: 220, description: "Hue (degrees) used to tint shadows. 0=red, 30=orange, 60=yellow, 120=green, 180=cyan, 200=teal, 240=blue, 300=magenta." },
+        shadowsSaturation: { type: "number", min: 0, max: 100, default: 0,   description: "Strength of the shadow tint. 0 disables." },
+        highlightsHue:     { type: "number", min: 0, max: 360, default: 30,  description: "Hue (degrees) used to tint highlights." },
+        highlightsSaturation: { type: "number", min: 0, max: 100, default: 0, description: "Strength of the highlight tint." },
+        balance:           { type: "number", min: -100, max: 100, default: 0, description: "Shifts the shadow/highlight midpoint. Positive = more pixels treated as highlights." },
+      },
+    },
+  },
+  Vignette: {
+    execute: async (inputs, nodeData) => {
+      const src = inputs['image:input'];
+      if (!(src instanceof ImageBitmap)) return { 'image:output': null };
+
+      const amount  = (nodeData?.amount  as number) ?? -30; // -100..+100, negative=darken
+      const size    = (nodeData?.size    as number) ?? 50;  // 0..100, smaller=tighter inner circle
+      const feather = (nodeData?.feather as number) ?? 50;  // 0..100, edge softness
+
+      const canvas = new OffscreenCanvas(src.width, src.height);
+      const ctx = canvas.getContext('2d') as OffscreenCanvasRenderingContext2D;
+      ctx.drawImage(src, 0, 0);
+      const id = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const d = id.data;
+      const W = canvas.width, H = canvas.height;
+      const cx = W / 2, cy = H / 2;
+
+      // Normalize per-axis so the vignette is oval-shaped (matches aspect).
+      const innerR = size / 100;          // 0..1, where the falloff begins
+      const outerR = innerR + feather / 100; // where it's fully applied; clamped below
+      const span = Math.max(0.001, outerR - innerR);
+      const k = amount / 100; // -1..+1
+
+      let i = 0;
+      for (let y = 0; y < H; y++) {
+        const dy = (y - cy) / cy;
+        for (let x = 0; x < W; x++) {
+          const dx = (x - cx) / cx;
+          const dist = Math.sqrt(dx * dx + dy * dy); // 0 at center, ~1.41 at corner
+          // smoothstep from innerR..outerR
+          const t = Math.max(0, Math.min(1, (dist - innerR) / span));
+          const f = t * t * (3 - 2 * t); // smoothstep
+          // factor: 1.0 at center, (1 + k * direction) toward edge.
+          // Negative amount: multiply by (1 - f * |k|) → darken
+          // Positive amount: add f * k * 255 → brighten
+          if (k < 0) {
+            const m = 1 + k * f; // 1 → 1+k as f goes 0..1
+            d[i]     = d[i]     * m;
+            d[i + 1] = d[i + 1] * m;
+            d[i + 2] = d[i + 2] * m;
+          } else if (k > 0) {
+            const add = k * f * 255;
+            d[i]     = d[i]     + add;
+            d[i + 1] = d[i + 1] + add;
+            d[i + 2] = d[i + 2] + add;
+          }
+          i += 4;
+        }
+      }
+      ctx.putImageData(id, 0, 0);
+      return { 'image:output': canvas.transferToImageBitmap() };
+    },
+    schema: {
+      description: "Vignette — darkens (or brightens) the corners radially with smooth oval falloff. Defines mood in cinematic looks. Almost always belongs LAST in the chain (after color/tonal nodes, before or after Grain). Recipes: True Detective S1 (heavy): amount -55, size 25, feather 55. Drive / Blade Runner (moody): amount -40, size 35, feather 55. Twilight (subtle): amount -25, size 45, feather 65. Wes Anderson (very subtle): amount -15, size 50, feather 70. Brightening (rare): positive amount creates a halo effect.",
+      inputs: [{ name: "image:input", type: "image", required: true }],
+      outputs: [{ name: "image:output", type: "image" }],
+      params: {
+        amount:  { type: "number", min: -100, max: 100, default: -30, description: "Darken (negative) or brighten (positive) corners. -100 = pure black corners." },
+        size:    { type: "number", min: 0, max: 100, default: 50, description: "Inner radius where falloff begins. Smaller = tighter spotlight." },
+        feather: { type: "number", min: 0, max: 100, default: 50, description: "Width of the falloff. Larger = softer edge." },
+      },
+    },
+  },
+  Grain: {
+    execute: async (inputs, nodeData) => {
+      const src = inputs['image:input'];
+      if (!(src instanceof ImageBitmap)) return { 'image:output': null };
+
+      const amount = (nodeData?.amount as number) ?? 30;     // 0..100, strength
+      const mono   = (nodeData?.mono   as boolean) ?? true;   // luminance-only vs colored
+      const seed   = (nodeData?.seed   as number) ?? 1;       // any int
+
+      const canvas = new OffscreenCanvas(src.width, src.height);
+      const ctx = canvas.getContext('2d') as OffscreenCanvasRenderingContext2D;
+      ctx.drawImage(src, 0, 0);
+      const id = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const d = id.data;
+
+      const rng = mulberry32(seed);
+      const strength = amount * 0.5; // ±50 max in 0..255 space at amount=100
+
+      if (mono) {
+        for (let i = 0; i < d.length; i += 4) {
+          const n = (rng() - 0.5) * 2 * strength; // [-strength, +strength]
+          d[i]     += n;
+          d[i + 1] += n;
+          d[i + 2] += n;
+        }
+      } else {
+        for (let i = 0; i < d.length; i += 4) {
+          d[i]     += (rng() - 0.5) * 2 * strength;
+          d[i + 1] += (rng() - 0.5) * 2 * strength;
+          d[i + 2] += (rng() - 0.5) * 2 * strength;
+        }
+      }
+      ctx.putImageData(id, 0, 0);
+      return { 'image:output': canvas.transferToImageBitmap() };
+    },
+    schema: {
+      description: "Film grain — adds noise. Critical for True Detective, Moonlight, anything trying to feel like film. MUST be the LAST node before Output (after Curves, SplitToning, Vignette, etc.) — placing Grain earlier means downstream tone-mapping smooths it out, defeating the point. Recipes: True Detective S1: amount 45, mono true. Moonlight: amount 30, mono true. Subtle film feel: amount 12-18. Heavy 16mm: amount 55+. Use mono=true for authentic film grain (luminance noise); colored noise looks like digital sensor noise.",
+      inputs: [{ name: "image:input", type: "image", required: true }],
+      outputs: [{ name: "image:output", type: "image" }],
+      params: {
+        amount: { type: "number", min: 0, max: 100, default: 30, description: "Grain strength. 10 is subtle, 50+ is heavy." },
+        mono:   { type: "boolean", default: true, description: "Monochromatic grain (authentic film) vs RGB noise (digital sensor)." },
+        seed:   { type: "number", min: 1, max: 9999, default: 1, description: "Pattern seed. Change to get a different noise pattern; same seed = same pattern." },
+      },
+    },
+  },
+  Posterize: {
+    execute: async (inputs, nodeData) => {
+      const src = inputs['image:input'];
+      if (!(src instanceof ImageBitmap)) return { 'image:output': null };
+
+      const levels = Math.max(2, Math.min(32, Math.round((nodeData?.levels as number) ?? 4)));
+      const mode = (nodeData?.mode as string) ?? 'rgb';
+
+      const canvas = new OffscreenCanvas(src.width, src.height);
+      const ctx = canvas.getContext('2d') as OffscreenCanvasRenderingContext2D;
+      ctx.drawImage(src, 0, 0);
+      const id = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const data = id.data;
+      const step = 255 / (levels - 1);
+
+      if (mode === 'luminance') {
+        for (let i = 0; i < data.length; i += 4) {
+          const lum = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+          const q = Math.round(lum / step) * step;
+          data[i] = data[i + 1] = data[i + 2] = q;
+        }
+      } else {
+        for (let i = 0; i < data.length; i += 4) {
+          data[i]     = Math.round(data[i] / step) * step;
+          data[i + 1] = Math.round(data[i + 1] / step) * step;
+          data[i + 2] = Math.round(data[i + 2] / step) * step;
+        }
+      }
+      ctx.putImageData(id, 0, 0);
+      return { 'image:output': canvas.transferToImageBitmap() };
+    },
+    schema: {
+      description: "Quantizes pixel values into N levels per channel. RGB mode = N levels per R/G/B (4 levels = 64 colors total, the Warhol/comic-flat look). Luminance mode = N flat grayscale bands. Pair with GradientMap for full Warhol/poster effects.",
+      inputs: [{ name: "image:input", type: "image", required: true }],
+      outputs: [{ name: "image:output", type: "image" }],
+      params: {
+        levels: { type: "number", min: 2, max: 16, step: 1, default: 4, description: "Number of bands per channel. 2 = harshest, 8 = subtle." },
+        mode: { type: "enum", values: ["rgb", "luminance"], default: "rgb", description: "rgb = posterize each channel independently. luminance = flat grayscale bands." },
+      },
+    },
+  },
+  SolidFill: {
+    execute: async (inputs, nodeData) => {
+      const src = inputs['image:input'];
+      const color = (nodeData?.color as string) ?? '#000080';
+      const fallbackW = (nodeData?.width as number) ?? 512;
+      const fallbackH = (nodeData?.height as number) ?? 512;
+      const w = src instanceof ImageBitmap ? src.width : fallbackW;
+      const h = src instanceof ImageBitmap ? src.height : fallbackH;
+      const canvas = new OffscreenCanvas(w, h);
+      const ctx = canvas.getContext('2d') as OffscreenCanvasRenderingContext2D;
+      ctx.fillStyle = color;
+      ctx.fillRect(0, 0, w, h);
+      return { 'image:output': canvas.transferToImageBitmap() };
+    },
+    schema: {
+      description: "Outputs a solid color rectangle. If image:input is connected, the output matches its dimensions; otherwise uses width/height. Pair with Blend to colorize, fill backgrounds, or tint a black-and-white image (e.g. give Canny edges a colored background).",
+      inputs: [
+        { name: "image:input", type: "image", required: false, description: "Optional. If provided, output matches its size." },
+      ],
+      outputs: [{ name: "image:output", type: "image" }],
+      params: {
+        color: { type: "color", default: "#000080", description: "Fill color." },
+        width: { type: "number", min: 1, max: 4096, default: 512, description: "Width when no image:input is connected." },
+        height: { type: "number", min: 1, max: 4096, default: 512, description: "Height when no image:input is connected." },
+      },
+    },
+  },
+  GradientMap: {
+    execute: async (inputs, nodeData) => {
+      const src = inputs['image:input'];
+      if (!(src instanceof ImageBitmap)) return { 'image:output': null };
+
+      const lowHex = (nodeData?.colorLow as string) ?? '#000000';
+      const highHex = (nodeData?.colorHigh as string) ?? '#ffffff';
+      const low = hexToRgb(lowHex);
+      const high = hexToRgb(highHex);
+
+      const canvas = new OffscreenCanvas(src.width, src.height);
+      const ctx = canvas.getContext('2d') as OffscreenCanvasRenderingContext2D;
+      ctx.drawImage(src, 0, 0);
+      const id = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const data = id.data;
+
+      for (let i = 0; i < data.length; i += 4) {
+        // luminance from existing pixel
+        const t = (0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]) / 255;
+        data[i]     = low.r + (high.r - low.r) * t;
+        data[i + 1] = low.g + (high.g - low.g) * t;
+        data[i + 2] = low.b + (high.b - low.b) * t;
+        // alpha unchanged
+      }
+      ctx.putImageData(id, 0, 0);
+      return { 'image:output': canvas.transferToImageBitmap() };
+    },
+    schema: {
+      description: "Maps image luminance to a two-color ramp. Black input → colorLow, white input → colorHigh, gray = blend. The single most useful node for stylized print looks: blueprint (black→navy, white→cyan), duotone, sepia, riso, GameBoy. Run on a Canny output to get colored edges on a colored background.",
+      inputs: [{ name: "image:input", type: "image", required: true }],
+      outputs: [{ name: "image:output", type: "image" }],
+      params: {
+        colorLow: { type: "color", default: "#000080", description: "Color that black input pixels become." },
+        colorHigh: { type: "color", default: "#ffffff", description: "Color that white input pixels become." },
+      },
+    },
   },
   Output: {
     execute: async (inputs) => {
@@ -533,6 +1032,15 @@ const nodeRegistry: Record<string, NodeExecutor> = {
         'image:output': image instanceof ImageBitmap ? image : null,
         'mask:output': mask instanceof ImageBitmap ? mask : null,
       }
+    },
+    schema: {
+      description: "Final output. Displays whatever is connected to image:input in the preview panel. Every pipeline should end with one.",
+      inputs: [
+        { name: "image:input", type: "image", required: true },
+        { name: "mask:input", type: "mask", required: false },
+      ],
+      outputs: [],
+      params: {},
     },
   },
 };
