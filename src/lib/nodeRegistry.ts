@@ -730,15 +730,57 @@ const nodeRegistry: Record<string, NodeExecutor> = {
       return { 'image:output': canvas.transferToImageBitmap() };
     },
     schema: {
-      description: "Tone curves — for TONAL adjustments (lift blacks, clip whites, contrast, brightness across tonal ranges). Five anchors per channel: BlackPoint at x=0 (0..100, lifts the floor — hazy faded-film look), Shadows at x=64, Midtones at x=128, Highlights at x=192, WhitePoint at x=255 (0..100, clips the ceiling — soft film highlights). Use Curves for TONE, use SplitToning for COLOR CAST — do not fake a color cast with per-channel Curves shifts; SplitToning is built for that and produces a much stronger result. Master values are the main lever; values under 20 are usually too subtle. Recipes (master only — pair with SplitToning for color): True Detective S1 (hazy lift): masterBlackPoint +40, masterWhitePoint +25, masterMidtones -10. Twilight: masterBlackPoint +20, masterWhitePoint +15, masterMidtones -10. Drive / Blade Runner: masterBlackPoint +25, masterWhitePoint +10, masterShadows -10, masterHighlights +15 (S-curve for contrast). Wes Anderson (pastel): masterBlackPoint +35, masterWhitePoint +25, masterMidtones +10. Nolan / IMAX: masterBlackPoint 0 (kept crushed), masterShadows -15, masterHighlights +10.",
+      description: `Tone curves — for TONAL adjustments (lift blacks, clip whites, contrast) AND for SURGICAL per-channel color shifts that complement SplitToning's bigger cast. Five anchors per channel: BlackPoint at x=0 (0..100, lifts the floor — hazy faded-film look), Shadows at x=64, Midtones at x=128, Highlights at x=192, WhitePoint at x=255 (0..100, clips the ceiling — soft film highlights).
+
+DIVISION OF LABOR: SplitToning does the loud color cast (saturation 30+ per range). Curves per-channel does the SUBTLE shifts (typically ±5 to ±15) — slight skin warmth, dirty greens in shadows, cool sky highlights, suppressed reds for cyanotype, etc. Use BOTH together for cinematic looks; using only one undershoots.
+
+Master values are the main tonal lever; values under 20 are subtle.
+
+Per-look recipes (use ALL the values listed; ignore none):
+
+  TRUE_DETECTIVE_S1 (hazy + sickly green undertone):
+    masterBlackPoint=40, masterWhitePoint=25, masterMidtones=-10
+    greenShadows=+15, greenMidtones=+5
+
+  DRIVE / BLADE_RUNNER_2049 (S-curve + deeper teal/orange):
+    masterBlackPoint=25, masterWhitePoint=10, masterShadows=-10, masterHighlights=+15
+    blueShadows=+10, redHighlights=+8
+
+  TWILIGHT (heavy desaturated green-cyan wash, hazy lifted blacks):
+    masterBlackPoint=40, masterWhitePoint=20, masterMidtones=-10
+    greenMidtones=+12, greenShadows=+8
+    redMidtones=-10, redHighlights=-5
+    blueMidtones=+5
+
+  MOONLIGHT (deep teal, crushed-but-lifted):
+    masterBlackPoint=15, masterShadows=-10, masterHighlights=+5
+    blueShadows=+18, redMidtones=-5
+
+  SEPIA (warm, killed blues):
+    masterBlackPoint=20, masterWhitePoint=20, masterMidtones=+5
+    redHighlights=+12, blueShadows=-15, blueHighlights=-10
+
+  CYANOTYPE (deep blue, suppressed reds):
+    masterBlackPoint=10, masterWhitePoint=15
+    blueShadows=+25, redShadows=-15, redHighlights=-10
+
+  WES_ANDERSON (pastel, slight rosy warmth):
+    masterBlackPoint=35, masterWhitePoint=25, masterMidtones=+10
+    redMidtones=+8, greenShadows=-5
+
+  CHRISTOPHER_NOLAN (crushed cool, green-tinted shadows):
+    masterBlackPoint=0, masterShadows=-15, masterHighlights=+10
+    greenShadows=+10, blueHighlights=-5
+
+Per-channel values typically belong in the ±5 to ±15 range — they are nudges, not strokes. SplitToning handles the bold color cast; Curves per-channel handles the polish.`,
       inputs: [{ name: "image:input", type: "image", required: true }],
       outputs: [{ name: "image:output", type: "image" }],
       params: {
-        masterBlackPoint:    { type: "number", min: 0, max: 100, default: 0, description: "Master black-point lift (raises (0,0) up). The hazy / faded-film effect." },
+        masterBlackPoint:    { type: "number", min: 0, max: 100, default: 0, description: "Master black-point lift (raises (0,0) up). The hazy / faded-film effect. FLOOR FOR VISIBLE LIFT: 20. Values 1–10 are invisible. If a look calls for hazy/lifted blacks, use 25–45." },
         masterShadows:       { type: "number", min: -100, max: 100, default: 0, description: "Master shadows (anchor at input=64)." },
         masterMidtones:      { type: "number", min: -100, max: 100, default: 0, description: "Master midtones (anchor at input=128)." },
         masterHighlights:    { type: "number", min: -100, max: 100, default: 0, description: "Master highlights (anchor at input=192)." },
-        masterWhitePoint:    { type: "number", min: 0, max: 100, default: 0, description: "Master white-point clip (lowers (255,255) down). Soft highlight rolloff." },
+        masterWhitePoint:    { type: "number", min: 0, max: 100, default: 0, description: "Master white-point clip (lowers (255,255) down). Soft highlight rolloff. FLOOR FOR VISIBLE CLIP: 15. For cinematic looks use 15–25." },
         redBlackPoint:       { type: "number", min: 0, max: 100, default: 0, description: "Red shadows lift (warm haze in shadows)." },
         redShadows:          { type: "number", min: -100, max: 100, default: 0, description: "Red shadows. Positive = warm shadows." },
         redMidtones:         { type: "number", min: -100, max: 100, default: 0, description: "Red midtones." },
@@ -798,14 +840,35 @@ const nodeRegistry: Record<string, NodeExecutor> = {
       return { 'image:output': canvas.transferToImageBitmap() };
     },
     schema: {
-      description: "Split Toning — tints shadows and highlights with different hues. ALWAYS USE THIS NODE WHENEVER A REQUESTED LOOK HAS A COLOR CAST OR NAMED MOOD (cinematic, film, retro, sepia, teal-and-orange, etc.). Do NOT try to fake color casts with per-channel Curves; SplitToning is built for exactly this and Curves with single-channel offsets undershoots dramatically. Recipes (commit to these — gentle values look invisible): True Detective S1 (yellow-green wash): shadowsHue 60, shadowsSaturation 55, highlightsHue 45, highlightsSaturation 40. Drive / Blade Runner 2049 (teal-and-orange): shadowsHue 200, shadowsSaturation 60, highlightsHue 30, highlightsSaturation 50. Twilight: shadowsHue 200, shadowsSaturation 45, highlightsHue 25, highlightsSaturation 35. Moonlight: shadowsHue 215, shadowsSaturation 65, highlightsHue 200, highlightsSaturation 30. Sepia: shadowsHue 30, shadowsSaturation 60, highlightsHue 45, highlightsSaturation 40. Cyanotype: shadowsHue 220, shadowsSaturation 75, highlightsHue 60, highlightsSaturation 30. Wes Anderson (pastel): shadowsHue 30, shadowsSaturation 25, highlightsHue 200, highlightsSaturation 20. Saturation 0 = no tint on that range. balance shifts the midpoint between shadow and highlight regions (positive = treat more pixels as highlights). Numbers under 30 are usually too subtle to register on screen.",
+      description: `Split Toning — tints shadows and highlights with different hues. ALWAYS USE THIS NODE WHENEVER A REQUESTED LOOK HAS A COLOR CAST OR NAMED MOOD (film, cinematic, retro, sepia, teal-and-orange, etc.). Do NOT fake color casts with per-channel Curves — SplitToning is built for this and Curves single-channel offsets undershoot dramatically.
+
+When the user names a specific look, use that EXACT recipe below. Do not blend recipes. Do not default to a generic cinematic preset. Match by name:
+
+  TRUE_DETECTIVE_S1 (yellow-green wash, sickly):
+    shadowsHue=60, shadowsSaturation=55, highlightsHue=45, highlightsSaturation=40
+  DRIVE / BLADE_RUNNER_2049 (teal-and-orange, neon):
+    shadowsHue=200, shadowsSaturation=60, highlightsHue=30, highlightsSaturation=50
+  TWILIGHT (the actual Catherine Hardwicke 2008 grade — heavy desaturated green-cyan wash, sickly Pacific Northwest. Greens dominate everything: trees, skin, road. NOT a blue-romance grade — common misconception):
+    shadowsHue=170, shadowsSaturation=55, highlightsHue=120, highlightsSaturation=40
+  MOONLIGHT (deep teal both ranges):
+    shadowsHue=215, shadowsSaturation=65, highlightsHue=200, highlightsSaturation=30
+  SEPIA (warm brown both ranges):
+    shadowsHue=30, shadowsSaturation=60, highlightsHue=45, highlightsSaturation=40
+  CYANOTYPE (deep blue shadows, pale yellow highlights):
+    shadowsHue=220, shadowsSaturation=75, highlightsHue=60, highlightsSaturation=30
+  WES_ANDERSON (pastel, low-saturation peach-and-pale-blue):
+    shadowsHue=30, shadowsSaturation=30, highlightsHue=200, highlightsSaturation=25
+  CHRISTOPHER_NOLAN (cool overall, slight green-yellow shadows):
+    shadowsHue=70, shadowsSaturation=30, highlightsHue=210, highlightsSaturation=25
+
+Saturation 0 = no tint on that range. balance shifts the shadow/highlight midpoint (positive = more pixels treated as highlights). Numbers under 25 are typically invisible at preview resolution.`,
       inputs: [{ name: "image:input", type: "image", required: true }],
       outputs: [{ name: "image:output", type: "image" }],
       params: {
         shadowsHue:        { type: "number", min: 0, max: 360, default: 220, description: "Hue (degrees) used to tint shadows. 0=red, 30=orange, 60=yellow, 120=green, 180=cyan, 200=teal, 240=blue, 300=magenta." },
-        shadowsSaturation: { type: "number", min: 0, max: 100, default: 0,   description: "Strength of the shadow tint. 0 disables." },
+        shadowsSaturation: { type: "number", min: 0, max: 100, default: 0,   description: "Strength of shadow tint, range 0–100. FLOOR FOR VISIBLE EFFECT: 25. Values 1–24 are invisible. Recipe values (35–65) are intentional, do not reduce them. If you intend any visible tint, set this to 30 or higher." },
         highlightsHue:     { type: "number", min: 0, max: 360, default: 30,  description: "Hue (degrees) used to tint highlights." },
-        highlightsSaturation: { type: "number", min: 0, max: 100, default: 0, description: "Strength of the highlight tint." },
+        highlightsSaturation: { type: "number", min: 0, max: 100, default: 0, description: "Strength of highlight tint, range 0–100. FLOOR FOR VISIBLE EFFECT: 25. Same rule as shadowsSaturation: use recipe values, do not halve them. If you intend any visible tint, set this to 30 or higher." },
         balance:           { type: "number", min: -100, max: 100, default: 0, description: "Shifts the shadow/highlight midpoint. Positive = more pixels treated as highlights." },
       },
     },
@@ -867,7 +930,7 @@ const nodeRegistry: Record<string, NodeExecutor> = {
       inputs: [{ name: "image:input", type: "image", required: true }],
       outputs: [{ name: "image:output", type: "image" }],
       params: {
-        amount:  { type: "number", min: -100, max: 100, default: -30, description: "Darken (negative) or brighten (positive) corners. -100 = pure black corners." },
+        amount:  { type: "number", min: -100, max: 100, default: -30, description: "Darken (negative) or brighten (positive) corners. FLOOR FOR VISIBLE DARKEN: -25 (i.e. -25 or more negative). Values like -10 or -5 are invisible. Use recipe values, do not soften them." },
         size:    { type: "number", min: 0, max: 100, default: 50, description: "Inner radius where falloff begins. Smaller = tighter spotlight." },
         feather: { type: "number", min: 0, max: 100, default: 50, description: "Width of the falloff. Larger = softer edge." },
       },
@@ -909,11 +972,23 @@ const nodeRegistry: Record<string, NodeExecutor> = {
       return { 'image:output': canvas.transferToImageBitmap() };
     },
     schema: {
-      description: "Film grain — adds noise. Critical for True Detective, Moonlight, anything trying to feel like film. MUST be the LAST node before Output (after Curves, SplitToning, Vignette, etc.) — placing Grain earlier means downstream tone-mapping smooths it out, defeating the point. Recipes: True Detective S1: amount 45, mono true. Moonlight: amount 30, mono true. Subtle film feel: amount 12-18. Heavy 16mm: amount 55+. Use mono=true for authentic film grain (luminance noise); colored noise looks like digital sensor noise.",
+      description: `Film grain — adds noise. Every cinematic / named-film look needs grain (even subtle); without it the grade looks like a "filter" rather than film. ALWAYS include Grain as the LAST node in any cinematic pipeline (after Curves, SplitToning, Vignette). Placing Grain earlier means downstream tone-mapping smooths it out, defeating the point.
+
+Recipes by named look (all use mono=true unless noted):
+  TRUE_DETECTIVE_S1: amount=45 (heavy 16mm grit)
+  MOONLIGHT: amount=30 (gentle film)
+  DRIVE / BLADE_RUNNER_2049: amount=25 (subtle, not the focus)
+  TWILIGHT: amount=20 (very subtle, modern digital-film blend)
+  SEPIA: amount=35 (period feel)
+  CYANOTYPE: amount=40 (paper texture)
+  WES_ANDERSON: amount=15 (very subtle, mostly clean)
+  CHRISTOPHER_NOLAN: amount=30 (IMAX 70mm grain)
+
+Default for any cinematic look not listed: amount=25, mono=true. mono=true is authentic film grain (luminance noise); set mono=false only when the user explicitly wants digital sensor noise.`,
       inputs: [{ name: "image:input", type: "image", required: true }],
       outputs: [{ name: "image:output", type: "image" }],
       params: {
-        amount: { type: "number", min: 0, max: 100, default: 30, description: "Grain strength. 10 is subtle, 50+ is heavy." },
+        amount: { type: "number", min: 0, max: 100, default: 30, description: "Grain strength, 0–100. FLOOR FOR VISIBLE GRAIN: 20. Below 15 is invisible at preview resolution. 30 is subtle film, 45+ is heavy 16mm. Use recipe values, do not soften." },
         mono:   { type: "boolean", default: true, description: "Monochromatic grain (authentic film) vs RGB noise (digital sensor)." },
         seed:   { type: "number", min: 1, max: 9999, default: 1, description: "Pattern seed. Change to get a different noise pattern; same seed = same pattern." },
       },
