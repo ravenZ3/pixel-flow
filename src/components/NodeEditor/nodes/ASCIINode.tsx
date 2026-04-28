@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useRef } from "react";
+import { memo, useCallback } from "react";
 import { Handle, Position, NodeProps, useEdges } from "reactflow";
 import useUIStore from "@/store/uiStore";
 import useExecutionStore from "@/store/executionStore";
@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/select";
 import NodeWrapper from "./NodeWrapper";
 import { handleRow } from "./handleStyles";
+import NodePreview from "./NodePreview";
 
 function ASCIINode({ id, data, selected }: NodeProps) {
   const updateNodeData = useUIStore((s) => s.updateNodeData);
@@ -38,34 +39,13 @@ function ASCIINode({ id, data, selected }: NodeProps) {
 
   const nodeOutputs = useExecutionStore((s) => s.nodeOutputs);
   const outputImage = nodeOutputs[id]?.["image:output"] as ImageBitmap | undefined;
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-
-  useEffect(() => {
-    if (outputImage && canvasRef.current) {
-      const canvas = canvasRef.current;
-      const ctx = canvas.getContext("2d");
-      if (ctx) {
-        const thumbWidth = 160;
-        canvas.width = thumbWidth;
-        canvas.height = (outputImage.height / outputImage.width) * thumbWidth;
-        ctx.drawImage(outputImage, 0, 0, canvas.width, canvas.height);
-      }
-    }
-  }, [outputImage]);
 
   const leftRow = handleRow({ side: 'left' });
   const rightRow = handleRow({ side: 'right' });
 
   return (
     <NodeWrapper id={id} label="ASCII Art" selected={selected}>
-      {outputImage && (
-        <div className="mb-4">
-          <canvas
-            ref={canvasRef}
-            className="node-thumbnail-canvas w-full h-full object-contain block"
-          />
-        </div>
-      )}
+      <NodePreview image={outputImage} visible={selected} />
       <div className="space-y-4 nodrag nopan">
         {/* Font Size */}
         <div className="node-control">

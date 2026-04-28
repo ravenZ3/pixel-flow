@@ -730,49 +730,7 @@ const nodeRegistry: Record<string, NodeExecutor> = {
       return { 'image:output': canvas.transferToImageBitmap() };
     },
     schema: {
-      description: `Tone curves — for TONAL adjustments (lift blacks, clip whites, contrast) AND for SURGICAL per-channel color shifts that complement SplitToning's bigger cast. Five anchors per channel: BlackPoint at x=0 (0..100, lifts the floor — hazy faded-film look), Shadows at x=64, Midtones at x=128, Highlights at x=192, WhitePoint at x=255 (0..100, clips the ceiling — soft film highlights).
-
-DIVISION OF LABOR: SplitToning does the loud color cast (saturation 30+ per range). Curves per-channel does the SUBTLE shifts (typically ±5 to ±15) — slight skin warmth, dirty greens in shadows, cool sky highlights, suppressed reds for cyanotype, etc. Use BOTH together for cinematic looks; using only one undershoots.
-
-Master values are the main tonal lever; values under 20 are subtle.
-
-Per-look recipes (use ALL the values listed; ignore none):
-
-  TRUE_DETECTIVE_S1 (hazy + sickly green undertone):
-    masterBlackPoint=40, masterWhitePoint=25, masterMidtones=-10
-    greenShadows=+15, greenMidtones=+5
-
-  DRIVE / BLADE_RUNNER_2049 (S-curve + deeper teal/orange):
-    masterBlackPoint=25, masterWhitePoint=10, masterShadows=-10, masterHighlights=+15
-    blueShadows=+10, redHighlights=+8
-
-  TWILIGHT (heavy desaturated green-cyan wash, hazy lifted blacks):
-    masterBlackPoint=40, masterWhitePoint=20, masterMidtones=-10
-    greenMidtones=+12, greenShadows=+8
-    redMidtones=-10, redHighlights=-5
-    blueMidtones=+5
-
-  MOONLIGHT (deep teal, crushed-but-lifted):
-    masterBlackPoint=15, masterShadows=-10, masterHighlights=+5
-    blueShadows=+18, redMidtones=-5
-
-  SEPIA (warm, killed blues):
-    masterBlackPoint=20, masterWhitePoint=20, masterMidtones=+5
-    redHighlights=+12, blueShadows=-15, blueHighlights=-10
-
-  CYANOTYPE (deep blue, suppressed reds):
-    masterBlackPoint=10, masterWhitePoint=15
-    blueShadows=+25, redShadows=-15, redHighlights=-10
-
-  WES_ANDERSON (pastel, slight rosy warmth):
-    masterBlackPoint=35, masterWhitePoint=25, masterMidtones=+10
-    redMidtones=+8, greenShadows=-5
-
-  CHRISTOPHER_NOLAN (crushed cool, green-tinted shadows):
-    masterBlackPoint=0, masterShadows=-15, masterHighlights=+10
-    greenShadows=+10, blueHighlights=-5
-
-Per-channel values typically belong in the ±5 to ±15 range — they are nudges, not strokes. SplitToning handles the bold color cast; Curves per-channel handles the polish.`,
+      description: "Tone curves for tonal shaping and subtle per-channel color shifts. Refer to the centralized RECIPES for cinematic values.",
       inputs: [{ name: "image:input", type: "image", required: true }],
       outputs: [{ name: "image:output", type: "image" }],
       params: {
@@ -840,28 +798,7 @@ Per-channel values typically belong in the ±5 to ±15 range — they are nudges
       return { 'image:output': canvas.transferToImageBitmap() };
     },
     schema: {
-      description: `Split Toning — tints shadows and highlights with different hues. ALWAYS USE THIS NODE WHENEVER A REQUESTED LOOK HAS A COLOR CAST OR NAMED MOOD (film, cinematic, retro, sepia, teal-and-orange, etc.). Do NOT fake color casts with per-channel Curves — SplitToning is built for this and Curves single-channel offsets undershoot dramatically.
-
-When the user names a specific look, use that EXACT recipe below. Do not blend recipes. Do not default to a generic cinematic preset. Match by name:
-
-  TRUE_DETECTIVE_S1 (yellow-green wash, sickly):
-    shadowsHue=60, shadowsSaturation=55, highlightsHue=45, highlightsSaturation=40
-  DRIVE / BLADE_RUNNER_2049 (teal-and-orange, neon):
-    shadowsHue=200, shadowsSaturation=60, highlightsHue=30, highlightsSaturation=50
-  TWILIGHT (the actual Catherine Hardwicke 2008 grade — heavy desaturated green-cyan wash, sickly Pacific Northwest. Greens dominate everything: trees, skin, road. NOT a blue-romance grade — common misconception):
-    shadowsHue=170, shadowsSaturation=55, highlightsHue=120, highlightsSaturation=40
-  MOONLIGHT (deep teal both ranges):
-    shadowsHue=215, shadowsSaturation=65, highlightsHue=200, highlightsSaturation=30
-  SEPIA (warm brown both ranges):
-    shadowsHue=30, shadowsSaturation=60, highlightsHue=45, highlightsSaturation=40
-  CYANOTYPE (deep blue shadows, pale yellow highlights):
-    shadowsHue=220, shadowsSaturation=75, highlightsHue=60, highlightsSaturation=30
-  WES_ANDERSON (pastel, low-saturation peach-and-pale-blue):
-    shadowsHue=30, shadowsSaturation=30, highlightsHue=200, highlightsSaturation=25
-  CHRISTOPHER_NOLAN (cool overall, slight green-yellow shadows):
-    shadowsHue=70, shadowsSaturation=30, highlightsHue=210, highlightsSaturation=25
-
-Saturation 0 = no tint on that range. balance shifts the shadow/highlight midpoint (positive = more pixels treated as highlights). Numbers under 25 are typically invisible at preview resolution.`,
+      description: "Split Toning — tints shadows and highlights with different hues. Essential for filmic color casts. Refer to RECIPES for named-look values.",
       inputs: [{ name: "image:input", type: "image", required: true }],
       outputs: [{ name: "image:output", type: "image" }],
       params: {
@@ -926,7 +863,7 @@ Saturation 0 = no tint on that range. balance shifts the shadow/highlight midpoi
       return { 'image:output': canvas.transferToImageBitmap() };
     },
     schema: {
-      description: "Vignette — darkens (or brightens) the corners radially with smooth oval falloff. Defines mood in cinematic looks. Almost always belongs LAST in the chain (after color/tonal nodes, before or after Grain). Recipes: True Detective S1 (heavy): amount -55, size 25, feather 55. Drive / Blade Runner (moody): amount -40, size 35, feather 55. Twilight (subtle): amount -25, size 45, feather 65. Wes Anderson (very subtle): amount -15, size 50, feather 70. Brightening (rare): positive amount creates a halo effect.",
+      description: "Vignette — darkens or brightens corners. Useful for framing and mood.",
       inputs: [{ name: "image:input", type: "image", required: true }],
       outputs: [{ name: "image:output", type: "image" }],
       params: {
@@ -972,19 +909,7 @@ Saturation 0 = no tint on that range. balance shifts the shadow/highlight midpoi
       return { 'image:output': canvas.transferToImageBitmap() };
     },
     schema: {
-      description: `Film grain — adds noise. Every cinematic / named-film look needs grain (even subtle); without it the grade looks like a "filter" rather than film. ALWAYS include Grain as the LAST node in any cinematic pipeline (after Curves, SplitToning, Vignette). Placing Grain earlier means downstream tone-mapping smooths it out, defeating the point.
-
-Recipes by named look (all use mono=true unless noted):
-  TRUE_DETECTIVE_S1: amount=45 (heavy 16mm grit)
-  MOONLIGHT: amount=30 (gentle film)
-  DRIVE / BLADE_RUNNER_2049: amount=25 (subtle, not the focus)
-  TWILIGHT: amount=20 (very subtle, modern digital-film blend)
-  SEPIA: amount=35 (period feel)
-  CYANOTYPE: amount=40 (paper texture)
-  WES_ANDERSON: amount=15 (very subtle, mostly clean)
-  CHRISTOPHER_NOLAN: amount=30 (IMAX 70mm grain)
-
-Default for any cinematic look not listed: amount=25, mono=true. mono=true is authentic film grain (luminance noise); set mono=false only when the user explicitly wants digital sensor noise.`,
+      description: "Film grain — adds noise. Essential for authentic film textures. Refer to RECIPES for amounts.",
       inputs: [{ name: "image:input", type: "image", required: true }],
       outputs: [{ name: "image:output", type: "image" }],
       params: {
@@ -1096,6 +1021,79 @@ Default for any cinematic look not listed: amount=25, mono=true. mono=true is au
       params: {
         colorLow: { type: "color", default: "#000080", description: "Color that black input pixels become." },
         colorHigh: { type: "color", default: "#ffffff", description: "Color that white input pixels become." },
+      },
+    },
+  },
+  Halation: {
+    execute: async (inputs, nodeData) => {
+      const src = inputs['image:input'];
+      if (!(src instanceof ImageBitmap)) return { 'image:output': null };
+
+      try {
+        const threshold = (nodeData?.threshold as number) ?? 200;
+        const radius = (nodeData?.radius as number) ?? 10;
+        const intensity = (nodeData?.intensity as number) ?? 50;
+
+        const { width, height } = src;
+        const canvas = new OffscreenCanvas(width, height);
+        const ctx = canvas.getContext('2d') as OffscreenCanvasRenderingContext2D;
+
+        // 1. Extract highlights into a separate layer
+        const glowCanvas = new OffscreenCanvas(width, height);
+        const glowCtx = glowCanvas.getContext('2d') as OffscreenCanvasRenderingContext2D;
+        
+        glowCtx.drawImage(src, 0, 0);
+        const id = glowCtx.getImageData(0, 0, width, height);
+        const d = id.data;
+        for (let i = 0; i < d.length; i += 4) {
+          const luma = 0.299 * d[i] + 0.587 * d[i+1] + 0.114 * d[i+2];
+          if (luma < threshold) {
+            d[i+3] = 0; // Transparent
+          }
+        }
+        glowCtx.putImageData(id, 0, 0);
+
+        // 2. Prepare final canvas
+        ctx.drawImage(src, 0, 0);
+
+        if (intensity > 0) {
+          // 3. Create the blurred red glow
+          const tintCanvas = new OffscreenCanvas(width, height);
+          const tintCtx = tintCanvas.getContext('2d') as OffscreenCanvasRenderingContext2D;
+          
+          if (radius > 0 && 'filter' in tintCtx) {
+            tintCtx.filter = `blur(${radius}px)`;
+          }
+          tintCtx.drawImage(glowCanvas, 0, 0);
+          
+          // Tint red
+          tintCtx.globalCompositeOperation = 'source-in';
+          tintCtx.fillStyle = '#ff3300';
+          tintCtx.fillRect(0, 0, width, height);
+          
+          // 4. Blend back
+          ctx.globalAlpha = intensity / 100;
+          ctx.globalCompositeOperation = 'screen';
+          ctx.drawImage(tintCanvas, 0, 0);
+          ctx.globalAlpha = 1.0;
+          ctx.globalCompositeOperation = 'source-over';
+        }
+
+        return { 'image:output': canvas.transferToImageBitmap() };
+      } catch (err) {
+        console.error("Halation failed:", err);
+        // Fallback: return original image so the pipeline doesn't break
+        return { 'image:output': src };
+      }
+    },
+    schema: {
+      description: "Optical halation effect. Adds a soft red glow to highlights, mimicking film emulsion behavior.",
+      inputs: [{ name: "image:input", type: "image", required: true }],
+      outputs: [{ name: "image:output", type: "image" }],
+      params: {
+        threshold: { type: "number", min: 0, max: 255, default: 200, description: "Luminance threshold for highlights." },
+        radius: { type: "number", min: 0, max: 50, default: 10, description: "Glow spread radius." },
+        intensity: { type: "number", min: 0, max: 100, default: 50, description: "Effect strength." },
       },
     },
   },

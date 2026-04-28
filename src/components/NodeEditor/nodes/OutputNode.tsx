@@ -1,10 +1,12 @@
-import { memo, useEffect, useRef } from 'react'
+import { memo, useEffect } from 'react'
 import { Handle, Position, NodeProps, useEdges } from 'reactflow'
 import { tv } from 'tailwind-variants'
 import useUIStore from '@/store/uiStore'
 import useExecutionStore from '@/store/executionStore'
 import { Badge } from '@/components/ui/badge'
 import NodeWrapper from './NodeWrapper'
+import { handleRow } from './handleStyles'
+import NodePreview from './NodePreview'
 
 const outputRing = tv({
   base: 'rounded transition-all duration-200',
@@ -19,13 +21,10 @@ const outputRing = tv({
   },
 })
 
-import { handleRow } from './handleStyles'
-
 function OutputNode({ id, selected }: NodeProps) {
   const edges = useEdges()
   const nodeOutputs = useExecutionStore(s => s.nodeOutputs)
   const { activePreviewNodeId, setActivePreviewNodeId } = useUIStore()
-  const canvasRef = useRef<HTMLCanvasElement>(null)
 
   const output = nodeOutputs[id]
   const image = output?.["image:output"] as ImageBitmap | undefined
@@ -40,17 +39,6 @@ function OutputNode({ id, selected }: NodeProps) {
   useEffect(() => {
     if (selected && !isActive) setActivePreviewNodeId(id)
   }, [selected, isActive, id, setActivePreviewNodeId])
-
-  useEffect(() => {
-    if (!image || !canvasRef.current) return
-    const canvas = canvasRef.current
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
-    const thumbWidth = 320
-    canvas.width = thumbWidth
-    canvas.height = (image.height / image.width) * thumbWidth
-    ctx.drawImage(image, 0, 0, canvas.width, canvas.height)
-  }, [image])
 
   return (
     <div className={outputRing({ active: isActive })}>
@@ -74,7 +62,7 @@ function OutputNode({ id, selected }: NodeProps) {
         {/* Thumbnail */}
         <div className="w-[200px] h-[130px] bg-zinc-800 rounded overflow-hidden mb-2">
           {image
-            ? <canvas ref={canvasRef} className="w-full h-full object-contain block" />
+            ? <NodePreview image={image} visible={true} thumbWidth={320} />
             : <div className="w-full h-full flex items-center justify-center text-[10px] text-zinc-600 font-mono">no image</div>
           }
         </div>

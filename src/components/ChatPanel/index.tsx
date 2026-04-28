@@ -28,6 +28,7 @@ export default function ChatPanel() {
     input: 0, output: 0, thinking: 0, total: 0,
   });
   const historyRef = useRef<ChatMessage[]>([]);
+  const lastInjectedSummaryRef = useRef<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -38,9 +39,14 @@ export default function ChatPanel() {
     const text = (textOverride ?? input).trim();
     if (!text || busy) return;
     setInput("");
-    // Drop any stale error from a previous turn
+    const imageStats = useUIStore.getState().imageStats;
+    const summary = imageStats?.summary ?? null;
+    const shouldInject = summary && summary !== lastInjectedSummaryRef.current;
+    if (shouldInject) lastInjectedSummaryRef.current = summary;
+    const finalContent = shouldInject ? `[${summary}]\n${text}` : text;
+
     setLog((l) => [...l.filter((e) => e.kind !== "error"), { kind: "user", text }]);
-    historyRef.current.push({ role: "user", content: text });
+    historyRef.current.push({ role: "user", content: finalContent });
     setBusy(true);
     try {
       const updated = await runAgent(historyRef.current, {
@@ -65,6 +71,7 @@ export default function ChatPanel() {
 
   const clearConversation = () => {
     historyRef.current = [];
+    lastInjectedSummaryRef.current = null;
     setLog([]);
     setTokens({ input: 0, output: 0, thinking: 0, total: 0 });
   };

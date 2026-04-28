@@ -23,6 +23,7 @@ const nodeItems: NodeItem[] = [
   { type: "Posterize", label: "Posterize", category: "stylize", description: "Reduce color levels" },
   { type: "GradientMap", label: "Gradient Map", category: "stylize", description: "Luminance to color ramp" },
   { type: "Vignette", label: "Vignette", category: "stylize", description: "Radial darkening" },
+  { type: "Halation", label: "Halation", category: "stylize", description: "Optical film glow" },
   { type: "Grain", label: "Grain", category: "stylize", description: "Film grain" },
   { type: "ASCII", label: "ASCII Art", category: "stylize", description: "Character rendering" },
   { type: "SolidFill", label: "Solid Fill", category: "generate", description: "Flat color emitter" },

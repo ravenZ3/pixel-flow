@@ -1,57 +1,37 @@
-import { memo, useCallback, useEffect, useRef } from "react";
+import { memo, useCallback } from "react";
 import { Handle, Position, NodeProps } from "reactflow";
 import useUIStore from "@/store/uiStore";
 import useExecutionStore from "@/store/executionStore";
 import { Slider } from "@/components/ui/slider";
 import NodeWrapper from "./NodeWrapper";
 import { handleRow } from "./handleStyles";
+import NodePreview from "./NodePreview";
 
 function ColorNode({ id, data, selected }: NodeProps) {
   const updateNodeData = useUIStore((s) => s.updateNodeData);
 
-  const brightness = data.brightness ?? 0;
-  const contrast = data.contrast ?? 0;
-  const saturation = data.saturation ?? 0;
-  const hue = data.hue ?? 0;
-  const gamma = data.gamma ?? 1.0;
+  const brightness = (data.brightness as number) ?? 0;
+  const contrast = (data.contrast as number) ?? 0;
+  const saturation = (data.saturation as number) ?? 0;
+  const hue = (data.hue as number) ?? 0;
+  const gamma = (data.gamma as number) ?? 1.0;
 
   const handleChange = useCallback(
-    (key: string, value: number) => {
-      updateNodeData(id, { [key]: value });
+    (key: string, val: number) => {
+      updateNodeData(id, { [key]: val });
     },
     [id, updateNodeData]
   );
 
   const nodeOutputs = useExecutionStore((s) => s.nodeOutputs);
   const outputImage = nodeOutputs[id]?.["image:output"] as ImageBitmap | undefined;
-  const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  useEffect(() => {
-    if (outputImage && canvasRef.current) {
-      const canvas = canvasRef.current;
-      const ctx = canvas.getContext("2d");
-      if (ctx) {
-        const thumbWidth = 160;
-        canvas.width = thumbWidth;
-        canvas.height = (outputImage.height / outputImage.width) * thumbWidth;
-        ctx.drawImage(outputImage, 0, 0, canvas.width, canvas.height);
-      }
-    }
-  }, [outputImage]);
-
-  const leftRow = handleRow({ side: 'left' });
-  const rightRow = handleRow({ side: 'right' });
+  const leftRow = handleRow({ side: "left" });
+  const rightRow = handleRow({ side: "right" });
 
   return (
     <NodeWrapper id={id} label="Color" selected={selected}>
-      {outputImage && (
-        <div className="mb-4">
-          <canvas
-            ref={canvasRef}
-            className="node-thumbnail-canvas w-full h-full object-contain block"
-          />
-        </div>
-      )}
+      <NodePreview image={outputImage} visible={selected} />
       <div className="space-y-4 nopan nodrag">
         <div className="node-control">
           <label className="node-label">Brightness: {brightness}</label>

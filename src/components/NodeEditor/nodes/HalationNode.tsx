@@ -7,11 +7,11 @@ import NodeWrapper from "./NodeWrapper";
 import { handleRow } from "./handleStyles";
 import NodePreview from "./NodePreview";
 
-function VignetteNode({ id, data, selected }: NodeProps) {
+function HalationNode({ id, data, selected }: NodeProps) {
   const updateNodeData = useUIStore((s) => s.updateNodeData);
-  const amount = (data.amount as number) ?? -30;
-  const size = (data.size as number) ?? 50;
-  const feather = (data.feather as number) ?? 50;
+  const threshold = (data.threshold as number) ?? 200;
+  const radius = (data.radius as number) ?? 10;
+  const intensity = (data.intensity as number) ?? 50;
 
   const change = useCallback(
     (key: string, value: number) => updateNodeData(id, { [key]: value }),
@@ -25,37 +25,37 @@ function VignetteNode({ id, data, selected }: NodeProps) {
   const rightRow = handleRow({ side: "right" });
 
   return (
-    <NodeWrapper id={id} label="Vignette" selected={selected}>
+    <NodeWrapper id={id} label="Halation" selected={selected}>
       <NodePreview image={outputImage} visible={selected} />
       <div className="space-y-3 nopan nodrag">
         <div className="node-control">
           <label className="node-label flex items-center justify-between">
-            <span>Amount</span>
-            <span className="font-mono text-zinc-500">{amount > 0 ? `+${amount}` : amount}</span>
+            <span>Threshold</span>
+            <span className="font-mono text-zinc-500">{threshold}</span>
           </label>
           <Slider
-            value={[amount]} min={-100} max={100} step={1}
-            onValueChange={(v) => change("amount", Array.isArray(v) ? v[0] : v)}
+            value={[threshold]} min={0} max={255} step={1}
+            onValueChange={(v) => change("threshold", Array.isArray(v) ? v[0] : v)}
           />
         </div>
         <div className="node-control">
           <label className="node-label flex items-center justify-between">
-            <span>Size</span>
-            <span className="font-mono text-zinc-500">{size}</span>
+            <span>Radius</span>
+            <span className="font-mono text-zinc-500">{radius}</span>
           </label>
           <Slider
-            value={[size]} min={0} max={100} step={1}
-            onValueChange={(v) => change("size", Array.isArray(v) ? v[0] : v)}
+            value={[radius]} min={0} max={50} step={1}
+            onValueChange={(v) => change("radius", Array.isArray(v) ? v[0] : v)}
           />
         </div>
         <div className="node-control">
           <label className="node-label flex items-center justify-between">
-            <span>Feather</span>
-            <span className="font-mono text-zinc-500">{feather}</span>
+            <span>Intensity</span>
+            <span className="font-mono text-zinc-500">{intensity}%</span>
           </label>
           <Slider
-            value={[feather]} min={0} max={100} step={1}
-            onValueChange={(v) => change("feather", Array.isArray(v) ? v[0] : v)}
+            value={[intensity]} min={0} max={100} step={1}
+            onValueChange={(v) => change("intensity", Array.isArray(v) ? v[0] : v)}
           />
         </div>
       </div>
@@ -74,4 +74,4 @@ function VignetteNode({ id, data, selected }: NodeProps) {
   );
 }
 
-export default memo(VignetteNode);
+export default memo(HalationNode);

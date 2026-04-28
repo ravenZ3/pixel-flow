@@ -1,12 +1,13 @@
 import { tools, runTool } from "./tools";
 import nodeRegistry from "@/lib/nodeRegistry";
+import { RECIPES } from "@/lib/recipes";
 
 function buildNodeSchema(): string {
   const out: Record<string, unknown> = {};
   for (const [type, exec] of Object.entries(nodeRegistry)) {
     out[type] = exec.schema;
   }
-  return JSON.stringify(out, null, 2);
+  return JSON.stringify(out);
 }
 
 export type ChatMessage =
@@ -31,6 +32,8 @@ The complete node type schema is provided below — do NOT call list_node_types,
 --- NODE TYPES ---
 ${NODE_SCHEMA}
 --- END NODE TYPES ---
+
+${RECIPES}
 
 Workflow:
 1. ALWAYS call read_graph before mutating. Reuse what's already there — never create a duplicate of a node that already exists.
@@ -65,33 +68,30 @@ Concrete example of correct reasoning: "blueprint, white lines on dark blue" →
 
 When using GradientMap, remember: colorLow is what black input becomes, colorHigh is what white input becomes.
 
-CRITICAL — NODE ORDERING for cinematic / preset-style pipelines. The pipeline order matters because each node sees the output of the previous one. Default order, from input to output:
+CRITICAL — NODE ORDERING: ImageInput → Curves (tonal/surgical) → SplitToning (color cast) → Vignette → Grain → Output. Tonal shaping must precede tinting; grain must be last to preserve texture.
 
-  ImageInput  →  Curves (tonal: lift/clip/contrast)  →  SplitToning (color cast)  →  Vignette  →  Grain  →  Output
+EVERY cinematic pipeline MUST include all four nodes (Curves, SplitToning, Vignette, Grain). Omitting one makes the look read as a "filter" rather than film.
+- Curves: Use both Master (tone) and per-channel (surgical nudges ±5-15) as listed in recipes.
+- SplitToning: Handles the main color cast (saturation 30+).
+- Vignette: Framing/mood (usually darken).
+- Grain: Essential texture (always include).
 
-Why: tonal shaping should come before color tinting (so the tint sits on a properly shaped tonal range). Vignette should come after grading (so it darkens the graded image, not the raw one). Grain MUST be last — anything after grain smooths it back out.
+FLOOR RULES: Never set saturation < 25, vignette amount > -25 (weaker), grain < 20, or BlackPoint < 20. Values below these floors are invisible. The 0-100 scale is percent-of-effect; treat 50 as moderate. Use recipe values verbatim; do not "soften" them.
 
-CRITICAL — NODE PAIRING for cinematic looks. Every cinematic / named-film pipeline needs ALL FOUR of these nodes — leaving any one out makes the look read as "a filter" rather than the named aesthetic:
-- Curves handles TWO things: master tone (lifted blacks, clipped whites, contrast) AND surgical per-channel shifts (subtle skin warmth, dirty shadows, cool sky). Use BOTH master and per-channel values from the recipe — the master gives shape, the per-channel gives polish.
-- SplitToning handles the LOUD color cast (saturations 30+) — the recognizable teal-and-orange / yellow-green / sepia tint.
-- Vignette gives the framing/mood (almost always mild darken at corners).
-- Grain gives the film texture (always include, even at low amount; without grain the look feels like a digital filter, not film).
-
-CRITICAL — DO NOT skip per-channel Curves values. The recipes list both master values AND per-channel values (greenShadows, redHighlights, blueMidtones, etc.). Earlier prompts told you to "use Curves for tone, SplitToning for color"; ignore that. Curves per-channel does subtle nudges (±5 to ±15) that complement SplitToning's bigger cast. Set both. A pipeline with master-only Curves looks half-baked.
-
-Commit to recipe values. The schema descriptions list specific numbers per look — use them or values close to them. Halving a recipe (because "subtle is safer") makes the look invisible. If a user asks for "really commit to it," push values 20% higher than the recipe.
-
-NEVER set saturation values below 25, vignette amount above -25 (i.e. weaker than -25), grain amount below 20, or BlackPoint below 20 — those values are below the visibility floor and produce no perceptible change. The 0–100 scales are PERCENT-OF-EFFECT, not 0–1 normalized values; treat 50 as "moderate," not "extreme." If the recipe says 45, use 45 — do not round down to "be safe."
-
-If you find yourself picking a number under 20 for any saturation/amount/lift parameter, you have misjudged the scale. Re-read the schema's "FLOOR FOR VISIBLE EFFECT" hint and use a higher number.
-
-CRITICAL — NAMED-LOOK MATCHING. When the user names a specific film, mood, or aesthetic (Twilight, True Detective, Drive, Wes Anderson, sepia, cyanotype, etc.), the SplitToning schema lists EXACT recipes for each. Use the recipe whose name matches verbatim. Do NOT:
-- Reuse the previous turn's SplitToning values "because they were close enough."
+CRITICAL — NAMED-LOOK MATCHING. When the user names a specific film, mood, or aesthetic (Twilight, True Detective, Drive, Wes Anderson, sepia, cyanotype, etc.), refer to the [CINEMATIC LOOK RECIPES] block above for the EXACT values. Use the recipe whose name matches verbatim. Do NOT:
+- Reuse the previous turn's values "because they were close enough."
 - Average two recipes.
-- Default to a generic teal-and-orange when the user said "Twilight."
+- Default to a generic cinematic preset.
 - Tweak only Curves and leave SplitToning unchanged from the previous look.
 
-Each named look has DIFFERENT shadowsHue / highlightsHue values. If you build pipelines for two different looks and the SplitToning numbers come out identical, you have failed to read the recipes — re-read list_node_types output and use the named entry verbatim.`;
+Each turn, the user message may be prepended with an [Image context: ...] block containing luminance, contrast, and color statistics about their photo.
+- USE these stats to dial in your node parameters.
+- If Luminance is >70% (Bright), do NOT lift blacks/shadows in Curves unless specifically asked.
+- If Contrast is <30% (Flat), use Curves to add a slight S-curve to bring life back.
+- If there is a "Cool" or "Warm" cast, use SplitToning to either neutralize it (using the opposite hue) or lean into it (using the same hue) based on the requested aesthetic.
+- If Saturation is >60% (Vibrant), be conservative with SplitToning saturations.
+
+Each named look has DIFFERENT values. If you build pipelines for two different looks and the numbers come out identical, you have failed to read the recipes — re-read the [CINEMATIC LOOK RECIPES] block and use the entries verbatim.`;
 
 export interface TokenUsage {
   input: number;

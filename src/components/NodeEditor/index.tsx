@@ -31,6 +31,7 @@ import CurvesNode from "./nodes/CurvesNode";
 import SplitToningNode from "./nodes/SplitToningNode";
 import VignetteNode from "./nodes/VignetteNode";
 import GrainNode from "./nodes/GrainNode";
+import HalationNode from "./nodes/HalationNode";
 
 const nodeTypes = {
   ImageInput: ImageInputNode,
@@ -49,6 +50,7 @@ const nodeTypes = {
   SplitToning: SplitToningNode,
   Vignette: VignetteNode,
   Grain: GrainNode,
+  Halation: HalationNode,
 };
 
 let nodeIdCounter = 0;

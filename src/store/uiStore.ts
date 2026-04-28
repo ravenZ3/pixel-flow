@@ -30,6 +30,8 @@ interface UIStore {
   setActivePreviewNodeId: (id: string | null) => void;
   setShowMask: (show: boolean) => void;
   setMaskOverlayOpacity: (opacity: number) => void;
+  imageStats: import("@/lib/imageAnalysis").ImageStats | null;
+  setImageStats: (stats: import("@/lib/imageAnalysis").ImageStats | null) => void;
   saveTemplate: (name: string) => void;
   loadTemplate: (name: string) => void;
   applyPatch: (patch: GraphPatch) => { addedIds: string[] };
@@ -54,6 +56,9 @@ const useUIStore = create<UIStore>((set, get) => ({
   maskOverlayOpacity: 0.5,
   chatOpen: true,
   setChatOpen: (chatOpen) => set({ chatOpen }),
+
+  imageStats: null,
+  setImageStats: (imageStats) => set({ imageStats }),
 
   setNodes: (nodes) => set({ nodes }),
   setEdges: (edges) => set({ edges }),

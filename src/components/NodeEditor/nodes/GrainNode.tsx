@@ -1,10 +1,11 @@
-import { memo, useCallback, useEffect, useRef } from "react";
+import { memo, useCallback } from "react";
 import { Handle, Position, NodeProps } from "reactflow";
 import useUIStore from "@/store/uiStore";
 import useExecutionStore from "@/store/executionStore";
 import { Slider } from "@/components/ui/slider";
 import NodeWrapper from "./NodeWrapper";
 import { handleRow } from "./handleStyles";
+import NodePreview from "./NodePreview";
 
 function GrainNode({ id, data, selected }: NodeProps) {
   const updateNodeData = useUIStore((s) => s.updateNodeData);
@@ -19,31 +20,13 @@ function GrainNode({ id, data, selected }: NodeProps) {
 
   const nodeOutputs = useExecutionStore((s) => s.nodeOutputs);
   const outputImage = nodeOutputs[id]?.["image:output"] as ImageBitmap | undefined;
-  const thumbRef = useRef<HTMLCanvasElement>(null);
-
-  useEffect(() => {
-    if (outputImage && thumbRef.current) {
-      const c = thumbRef.current;
-      const ctx = c.getContext("2d");
-      if (ctx) {
-        const w = 160;
-        c.width = w;
-        c.height = (outputImage.height / outputImage.width) * w;
-        ctx.drawImage(outputImage, 0, 0, c.width, c.height);
-      }
-    }
-  }, [outputImage]);
 
   const leftRow = handleRow({ side: "left" });
   const rightRow = handleRow({ side: "right" });
 
   return (
     <NodeWrapper id={id} label="Grain" selected={selected}>
-      {outputImage && (
-        <div className="mb-3">
-          <canvas ref={thumbRef} className="node-thumbnail-canvas w-full h-full object-contain block" />
-        </div>
-      )}
+      <NodePreview image={outputImage} visible={selected} />
       <div className="space-y-3 nopan nodrag">
         <div className="node-control">
           <label className="node-label flex items-center justify-between">

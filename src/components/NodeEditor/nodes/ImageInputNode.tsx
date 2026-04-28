@@ -3,15 +3,15 @@
 import { memo, useCallback, useRef, useEffect } from "react";
 import { Handle, Position, NodeProps } from "reactflow";
 import useUIStore from "@/store/uiStore";
-import useExecutionStore from "@/store/executionStore";
-import NodeWrapper from "./NodeWrapper";
-
+import { calculateImageStats } from "@/lib/imageAnalysis";
+import NodePreview from "./NodePreview";
 import { handleRow } from "./handleStyles";
+import NodeWrapper from "./NodeWrapper";
 
 function ImageInputNode({ id, data, selected }: NodeProps) {
   const updateNodeData = useUIStore((s) => s.updateNodeData);
+  const setImageStats = useUIStore((s) => s.setImageStats);
   const fileRef = useRef<HTMLInputElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
 
   const handleUpload = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -21,28 +21,18 @@ function ImageInputNode({ id, data, selected }: NodeProps) {
       try {
         const bitmap = await createImageBitmap(file);
         updateNodeData(id, { uploadedImage: bitmap });
+        
+        // Analyze image and store stats
+        const stats = await calculateImageStats(bitmap);
+        setImageStats(stats);
       } catch (err) {
-        console.error("Failed to create ImageBitmap:", err);
+        console.error("Failed to process image:", err);
       }
     },
-    [id, updateNodeData]
+    [id, updateNodeData, setImageStats]
   );
 
   const uploadedImage = data.uploadedImage as ImageBitmap | undefined;
-
-  useEffect(() => {
-    if (uploadedImage && canvasRef.current) {
-      const canvas = canvasRef.current;
-      const ctx = canvas.getContext("2d");
-      if (ctx) {
-        // Thumbnail resolution (scaled down for node UI)
-        const thumbWidth = 160;
-        canvas.width = thumbWidth;
-        canvas.height = (uploadedImage.height / uploadedImage.width) * thumbWidth;
-        ctx.drawImage(uploadedImage, 0, 0, canvas.width, canvas.height);
-      }
-    }
-  }, [uploadedImage]);
 
   const rightRow = handleRow({ side: "right" });
 
@@ -59,14 +49,8 @@ function ImageInputNode({ id, data, selected }: NodeProps) {
       <button className="node-btn w-full mb-4" onClick={() => fileRef.current?.click()}>
         Upload Image
       </button>
-      {uploadedImage && (
-        <div className="mb-4">
-          <canvas
-            ref={canvasRef}
-            className="node-thumbnail-canvas w-full h-full object-contain block"
-          />
-        </div>
-      )}
+      
+      <NodePreview image={uploadedImage} visible={true} />
       
       <div className="mt-4">
         <div className={rightRow.row()}>

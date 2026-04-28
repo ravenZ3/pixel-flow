@@ -6,6 +6,7 @@ import { Slider } from "@/components/ui/slider";
 import { buildToneLUT } from "@/lib/nodeRegistry";
 import NodeWrapper from "./NodeWrapper";
 import { handleRow } from "./handleStyles";
+import NodePreview from "./NodePreview";
 
 type Channel = "master" | "red" | "green" | "blue";
 
@@ -80,20 +81,6 @@ function CurvesNode({ id, data, selected }: NodeProps) {
   // Output thumb
   const nodeOutputs = useExecutionStore((s) => s.nodeOutputs);
   const outputImage = nodeOutputs[id]?.["image:output"] as ImageBitmap | undefined;
-  const thumbRef = useRef<HTMLCanvasElement>(null);
-
-  useEffect(() => {
-    if (outputImage && thumbRef.current) {
-      const c = thumbRef.current;
-      const ctx = c.getContext("2d");
-      if (ctx) {
-        const w = 160;
-        c.width = w;
-        c.height = (outputImage.height / outputImage.width) * w;
-        ctx.drawImage(outputImage, 0, 0, c.width, c.height);
-      }
-    }
-  }, [outputImage]);
 
   // Curve preview canvas — composited from all four channels, with draggable anchor points.
   const curveRef = useRef<HTMLCanvasElement>(null);
@@ -259,11 +246,7 @@ function CurvesNode({ id, data, selected }: NodeProps) {
 
   return (
     <NodeWrapper id={id} label="Curves" selected={selected}>
-      {outputImage && (
-        <div className="mb-3">
-          <canvas ref={thumbRef} className="node-thumbnail-canvas w-full h-full object-contain block" />
-        </div>
-      )}
+      <NodePreview image={outputImage} visible={selected} />
 
       <div className="space-y-2 nopan nodrag">
         {/* Channel tabs */}
