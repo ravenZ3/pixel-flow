@@ -190,7 +190,36 @@ const useUIStore = create<UIStore>((set, get) => ({
     if (!str) return;
     try {
       const template = JSON.parse(str);
-      set({ nodes: template.nodes || [], edges: template.edges || [] });
+      const tplNodes: Node[] = template.nodes || [];
+      const tplEdges: Edge[] = template.edges || [];
+
+      // If the user already has an ImageInput with an uploaded photo on the
+      // canvas, preserve it and adapt the template to plug into it instead of
+      // wiping the upload. Templates are recipes — they should fit your input.
+      const liveSource = get().nodes.find(
+        (n) => n.type === "ImageInput" && (n.data as Record<string, unknown>)?.uploadedImage
+      );
+      const tplSources = tplNodes.filter((n) => n.type === "ImageInput");
+
+      if (liveSource && tplSources.length > 0) {
+        // Map every template ImageInput id → the existing live one, then drop
+        // the template's ImageInputs from the node list.
+        const idMap = new Map(tplSources.map((s) => [s.id, liveSource.id]));
+        const mergedNodes: Node[] = [
+          liveSource,
+          ...tplNodes.filter((n) => n.type !== "ImageInput"),
+        ];
+        const mergedEdges: Edge[] = tplEdges.map((e) => ({
+          ...e,
+          source: idMap.get(e.source) ?? e.source,
+          target: idMap.get(e.target) ?? e.target,
+        }));
+        set({ nodes: mergedNodes, edges: mergedEdges });
+      } else {
+        // No upload to preserve — straight replace.
+        set({ nodes: tplNodes, edges: tplEdges });
+      }
+
       const exec = useExecutionStore.getState();
       exec.markAllDirty();
       exec.requestExecution();

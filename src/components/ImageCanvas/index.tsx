@@ -40,14 +40,24 @@ export default function ImageCanvas() {
   const activePreviewNodeId = useUIStore((s) => s.activePreviewNodeId);
   const setShowMask = useUIStore((s) => s.setShowMask);
   const setMaskOverlayOpacity = useUIStore((s) => s.setMaskOverlayOpacity);
+  const nodes = useUIStore((s) => s.nodes);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerSize, setContainerSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
+  const [viewOriginal, setViewOriginal] = useState(false);
+
+  // Find the first ImageInput's uploaded image as the "original" baseline.
+  const originalBitmap = (() => {
+    const imageInput = nodes.find((n) => n.type === "ImageInput");
+    return (imageInput?.data?.uploadedImage as ImageBitmap | undefined) ?? null;
+  })();
 
   // Get both image and mask from the active output node
   const outputData = activePreviewNodeId ? nodeOutputs[activePreviewNodeId] : null;
-  const imageBitmap = (outputData?.["image:output"] as ImageBitmap) ?? (outputData?.image as ImageBitmap) ?? null;
+  const finalBitmap = (outputData?.["image:output"] as ImageBitmap) ?? (outputData?.image as ImageBitmap) ?? null;
+  const imageBitmap = viewOriginal && originalBitmap ? originalBitmap : finalBitmap;
   const maskBitmap = (outputData?.["mask:output"] as ImageBitmap) ?? (outputData?.mask as ImageBitmap) ?? null;
+  const canCompare = !!originalBitmap && !!finalBitmap && originalBitmap !== finalBitmap;
 
   const isMaskConnected = !!maskBitmap;
 
@@ -143,6 +153,12 @@ export default function ImageCanvas() {
               ref={canvasRef}
               className="relative rounded-lg border border-zinc-800 shadow-2xl block"
             />
+            {/* Original indicator + corner badge */}
+            {viewOriginal && (
+              <div className="absolute top-2 left-2 px-2 py-0.5 rounded bg-amber-500/20 border border-amber-500/50 text-amber-300 text-[10px] font-mono uppercase tracking-widest pointer-events-none">
+                Original
+              </div>
+            )}
           </div>
         ) : (
           <div className="flex flex-col items-center gap-4 text-zinc-700">
@@ -170,9 +186,45 @@ export default function ImageCanvas() {
       {/* Metadata + controls */}
       <div className="shrink-0 px-3 py-3 border-t border-zinc-900 surface-glass space-y-3">
         {imageBitmap && (
-          <p className="text-[10px] font-mono text-zinc-500 uppercase tracking-tight">
-            Resolution: {imageBitmap.width} × {imageBitmap.height}
-          </p>
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-[10px] font-mono text-zinc-500 uppercase tracking-tight">
+              {imageBitmap.width} × {imageBitmap.height}
+            </p>
+            {canCompare && (
+              <button
+                title="Tap to toggle, hold to compare"
+                onPointerDown={(e) => {
+                  // Distinguish tap (toggle) from press-and-hold (compare while held).
+                  // Capture state at press start so we can revert correctly on release.
+                  const start = Date.now();
+                  const wasShowingOriginal = viewOriginal;
+                  setViewOriginal(true);
+                  const release = () => {
+                    const heldMs = Date.now() - start;
+                    if (heldMs > 180) {
+                      // Hold-to-compare: revert to whatever was showing before press.
+                      setViewOriginal(wasShowingOriginal);
+                    } else {
+                      // Tap: toggle from the pre-press state.
+                      setViewOriginal(!wasShowingOriginal);
+                    }
+                    window.removeEventListener("pointerup", release);
+                    window.removeEventListener("pointercancel", release);
+                  };
+                  window.addEventListener("pointerup", release);
+                  window.addEventListener("pointercancel", release);
+                  e.preventDefault();
+                }}
+                className={`text-[11px] font-mono px-2 py-1 rounded border transition-all select-none ${
+                  viewOriginal
+                    ? "border-amber-500/50 bg-amber-950/30 text-amber-300"
+                    : "border-zinc-800 text-zinc-500 hover:text-zinc-200 hover:border-zinc-700"
+                }`}
+              >
+                {viewOriginal ? "● original" : "○ original"}
+              </button>
+            )}
+          </div>
         )}
 
         {isMaskConnected && (

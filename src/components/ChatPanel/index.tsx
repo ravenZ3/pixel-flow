@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
-import { runAgent, ChatMessage } from "@/lib/agent/loop";
+import { runAgent, ChatMessage, TokenUsage } from "@/lib/agent/loop";
 
 type LogEntry =
   | { kind: "user"; text: string }
@@ -21,6 +21,10 @@ export default function ChatPanel() {
   const [input, setInput] = useState("");
   const [log, setLog] = useState<LogEntry[]>([]);
   const [busy, setBusy] = useState(false);
+  const [lastModel, setLastModel] = useState<string | null>(null);
+  const [tokens, setTokens] = useState<{ input: number; output: number; thinking: number; total: number }>({
+    input: 0, output: 0, thinking: 0, total: 0,
+  });
   const historyRef = useRef<ChatMessage[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -40,6 +44,14 @@ export default function ChatPanel() {
       const updated = await runAgent(historyRef.current, {
         onAssistantText: (t) => setLog((l) => [...l, { kind: "assistant", text: t }]),
         onToolUse: (name, inp) => setLog((l) => [...l, { kind: "tool", name, input: inp }]),
+        onModel: (m) => setLastModel(m),
+        onUsage: (u: TokenUsage) =>
+          setTokens((prev) => ({
+            input: prev.input + u.input,
+            output: prev.output + u.output,
+            thinking: prev.thinking + u.thinking,
+            total: prev.total + u.total,
+          })),
       });
       historyRef.current = updated;
     } catch (e) {
@@ -52,6 +64,7 @@ export default function ChatPanel() {
   const clearConversation = () => {
     historyRef.current = [];
     setLog([]);
+    setTokens({ input: 0, output: 0, thinking: 0, total: 0 });
   };
 
   if (!open) {
@@ -69,9 +82,19 @@ export default function ChatPanel() {
     <div className="absolute bottom-4 right-4 z-40 w-[400px] h-[520px] flex flex-col rounded-xl border border-zinc-800 bg-[#0a0a0a]/95 backdrop-blur shadow-2xl overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-zinc-800 bg-zinc-950/50">
-        <div className="flex items-center gap-2">
-          <div className="text-sm font-semibold text-zinc-100">Graph Agent</div>
-          <div className="text-[10px] uppercase tracking-wider text-zinc-600">gemini · flash</div>
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="text-sm font-semibold text-zinc-100 shrink-0">Graph Agent</div>
+          <div className="text-[10px] uppercase tracking-wider text-zinc-600 shrink-0">
+            {lastModel ? lastModel.replace("gemini-2.5-", "gemini · ") : "gemini"}
+          </div>
+          {tokens.total > 0 && (
+            <div
+              title={`input ${tokens.input.toLocaleString()}\noutput ${tokens.output.toLocaleString()}\nthinking ${tokens.thinking.toLocaleString()}\ntotal ${tokens.total.toLocaleString()}\n\napprox cost ≈ $${estimateCost(tokens, lastModel).toFixed(4)}`}
+              className="text-[10px] font-mono text-zinc-500 truncate"
+            >
+              {formatTokens(tokens.total)} tok
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-1">
           {log.length > 0 && (
@@ -267,6 +290,37 @@ function Markdown({ text }: { text: string }) {
   flushList();
   flushPara();
   return <>{blocks}</>;
+}
+
+function formatTokens(n: number): string {
+  if (n < 1000) return String(n);
+  if (n < 10000) return (n / 1000).toFixed(1) + "k";
+  return Math.round(n / 1000) + "k";
+}
+
+// Rough public-pricing estimate (per million tokens, as of early 2026).
+// Numbers are best-effort; treat the displayed cost as an order-of-magnitude.
+function estimateCost(
+  t: { input: number; output: number; thinking: number },
+  model: string | null
+): number {
+  // Pro is the priciest in the chain; default to its rates if model unknown.
+  let inPerM = 1.25;
+  let outPerM = 10.0;
+  if (model?.includes("flash-lite")) {
+    inPerM = 0.10;
+    outPerM = 0.40;
+  } else if (model?.includes("flash")) {
+    inPerM = 0.30;
+    outPerM = 2.50;
+  } else if (model?.includes("pro")) {
+    inPerM = 1.25;
+    outPerM = 10.0;
+  }
+  // Thinking tokens billed at output rate per Gemini's docs.
+  const inputCost = (t.input * inPerM) / 1_000_000;
+  const outputCost = ((t.output + t.thinking) * outPerM) / 1_000_000;
+  return inputCost + outputCost;
 }
 
 function summarizePatch(input: Record<string, unknown>): string {
