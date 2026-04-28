@@ -117,10 +117,11 @@ export async function POST(req: Request) {
   }
 
   const body = await req.json();
-  const { system, messages, tools } = body as {
+  const { system, messages, tools, preferModel } = body as {
     system: string;
     messages: InMessage[];
     tools: InTool[];
+    preferModel?: "pro" | "flash";
   };
 
   try {
@@ -129,9 +130,16 @@ export async function POST(req: Request) {
     const contents = messagesToContents(messages);
     const functionDeclarations = toolsToFunctionDeclarations(tools);
 
-    const modelChain = ["gemini-2.5-flash", "gemini-2.5-flash-lite"];
+    // Hybrid routing: client passes preferModel="flash" for mechanical turns
+    // (list_node_types, read_graph) where Pro reasoning is wasted, and "pro"
+    // (default) for the apply_patch decision where Pro's parameter-dialing
+    // matters. The other model stays as fallback on overload.
+    const modelChain = preferModel === "flash"
+      ? ["gemini-2.5-flash", "gemini-2.5-pro"]
+      : ["gemini-2.5-pro", "gemini-2.5-flash"];
     let response;
     let lastErr: unknown;
+    let usedModel = "";
     outer: for (const model of modelChain) {
       for (let attempt = 0; attempt < 3; attempt++) {
         try {
@@ -141,24 +149,29 @@ export async function POST(req: Request) {
             config: {
               systemInstruction: system,
               tools: [{ functionDeclarations }],
-              // Enough headroom for tool calls + a short reply. Default budget
-              // can be small once thinking tokens are subtracted, which causes
-              // mid-sentence truncation.
               maxOutputTokens: 16384,
-              // Cap thinking so it can't starve the actual output. -1 = dynamic
-              // (Gemini decides), 0 disables, positive = explicit budget.
-              thinkingConfig: { thinkingBudget: 2048 },
+              // 4096 is enough for Pro to plan multi-node pipelines without
+              // burning 15k+ thinking tokens per turn. Earlier failures with
+              // budgets under ~2k were "agent skips apply_patch"; 4k has
+              // plenty of headroom while cutting per-build cost ~40%.
+              thinkingConfig: { thinkingBudget: 4096 },
             },
           });
+          usedModel = model;
           break outer;
         } catch (e: unknown) {
           lastErr = e;
           const msg = e instanceof Error ? e.message : String(e);
           const overloaded = /503|UNAVAILABLE|overloaded|high demand/i.test(msg);
           const quota = /429|RESOURCE_EXHAUSTED|quota/i.test(msg);
-          if (quota) break; // try next model in chain
+          // Loud logging so silent fallbacks stop being silent.
+          console.warn(`[agent] ${model} attempt ${attempt + 1} failed: ${msg.slice(0, 200)}`);
+          if (quota) {
+            console.warn(`[agent] ${model} quota-blocked, trying next model in chain`);
+            break;
+          }
           if (!overloaded || attempt === 2) {
-            if (overloaded) break; // try next model
+            if (overloaded) break;
             throw e;
           }
           await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
@@ -166,6 +179,7 @@ export async function POST(req: Request) {
       }
     }
     if (!response) throw lastErr ?? new Error("no response");
+    console.log(`[agent] used model: ${usedModel}`);
 
     // Convert Gemini response parts back into Anthropic-shaped blocks for the client
     const outBlocks: InBlock[] = [];
@@ -186,7 +200,16 @@ export async function POST(req: Request) {
     const hasToolUse = outBlocks.some((b) => b.type === "tool_use");
     const stop_reason = hasToolUse ? "tool_use" : "end_turn";
 
-    return NextResponse.json({ content: outBlocks, stop_reason });
+    const usage = response.usageMetadata
+      ? {
+          input: response.usageMetadata.promptTokenCount ?? 0,
+          output: response.usageMetadata.candidatesTokenCount ?? 0,
+          thinking: (response.usageMetadata as { thoughtsTokenCount?: number }).thoughtsTokenCount ?? 0,
+          total: response.usageMetadata.totalTokenCount ?? 0,
+        }
+      : null;
+
+    return NextResponse.json({ content: outBlocks, stop_reason, model: usedModel, usage });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     return NextResponse.json({ error: msg }, { status: 500 });
