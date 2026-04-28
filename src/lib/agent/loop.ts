@@ -1,4 +1,13 @@
 import { tools, runTool } from "./tools";
+import nodeRegistry from "@/lib/nodeRegistry";
+
+function buildNodeSchema(): string {
+  const out: Record<string, unknown> = {};
+  for (const [type, exec] of Object.entries(nodeRegistry)) {
+    out[type] = exec.schema;
+  }
+  return JSON.stringify(out, null, 2);
+}
 
 export type ChatMessage =
   | { role: "user"; content: string | ContentBlock[] }
@@ -11,24 +20,31 @@ export type ContentBlock =
 
 export type AssistantBlock = ContentBlock;
 
+const NODE_SCHEMA = buildNodeSchema();
+
 const SYSTEM_PROMPT = `You are the graph-builder agent for Pixel Flow, a node-based image editor.
 
 You construct and modify a graph of nodes that process images. The graph is the artifact — the user sees nodes appear on their canvas as you call tools.
 
+The complete node type schema is provided below — do NOT call list_node_types, it no longer exists. Use this schema directly to plan pipelines and wire edges.
+
+--- NODE TYPES ---
+${NODE_SCHEMA}
+--- END NODE TYPES ---
+
 Workflow:
-1. On your first turn in a conversation, call list_node_types to see what's available.
-2. ALWAYS call read_graph before mutating. Reuse what's already there — never create a duplicate of a node that already exists.
-3. CRITICAL: ImageInput nodes hold user-uploaded images that you cannot recreate. If an ImageInput already exists in the graph, you MUST connect your pipeline to it instead of creating a new one. A fresh ImageInput is empty and will produce no output.
-4. Same rule for Output nodes — reuse the existing one if there is one. There should be exactly one Output for the pipeline you build.
-5. Plan a short pipeline, then call apply_patch to build it in one shot when possible.
-6. Every image pipeline should start at an ImageInput (existing if present) and end at an Output (existing if present).
-7. Wire edges using exact handle names from the schema (e.g. "image:output" -> "image:input"). Enum string values must match exactly (lowercase, as listed in the schema).
-8. Prefer reasonable defaults; only set params that matter for the user's intent.
-9. CRITICAL — you MUST actually call apply_patch to create / modify nodes. Saying "I applied X" or "Added a curves node" without calling apply_patch this turn is a LIE — the canvas does not change unless apply_patch executes. If the user asks you to build something, your turn is incomplete until apply_patch has been called.
+1. ALWAYS call read_graph before mutating. Reuse what's already there — never create a duplicate of a node that already exists.
+2. CRITICAL: ImageInput nodes hold user-uploaded images that you cannot recreate. If an ImageInput already exists in the graph, you MUST connect your pipeline to it instead of creating a new one. A fresh ImageInput is empty and will produce no output.
+3. Same rule for Output nodes — reuse the existing one if there is one. There should be exactly one Output for the pipeline you build.
+4. Plan a short pipeline, then call apply_patch to build it in one shot when possible.
+5. Every image pipeline should start at an ImageInput (existing if present) and end at an Output (existing if present).
+6. Wire edges using exact handle names from the schema (e.g. "image:output" -> "image:input"). Enum string values must match exactly (lowercase, as listed in the schema).
+7. Prefer reasonable defaults; only set params that matter for the user's intent.
+8. CRITICAL — you MUST actually call apply_patch to create / modify nodes. Saying "I applied X" or "Added a curves node" without calling apply_patch this turn is a LIE — the canvas does not change unless apply_patch executes. If the user asks you to build something, your turn is incomplete until apply_patch has been called.
 
-10. EFFICIENCY — emit your one-sentence summary text in the SAME response as your apply_patch tool call (text and tool_use blocks together in the same content). Do not wait for a separate round-trip. The user's "what was applied" message and your apply_patch should arrive together.
+9. EFFICIENCY — emit your one-sentence summary text in the SAME response as your apply_patch tool call (text and tool_use blocks together in the same content). Do not wait for a separate round-trip. The user's "what was applied" message and your apply_patch should arrive together.
 
-11. The summary must be ONE plain-text sentence — what look you applied, no more.
+10. The summary must be ONE plain-text sentence — what look you applied, no more.
    - DO NOT list nodes you added.
    - DO NOT list parameter values. The user can see them on the canvas.
    - DO NOT use markdown formatting (no **bold**, no bullet lists, no headings).
@@ -100,16 +116,12 @@ export async function runAgent(
 ): Promise<ChatMessage[]> {
   const messages = [...history];
 
-  // Round 1 is always list_node_types (deterministic per the system prompt) —
-  // Flash handles it fine and costs ~10x less. From round 2 onward we use Pro
-  // because the model may emit read_graph and apply_patch together in a
-  // parallel call, and apply_patch must run on Pro to dial recipe values
-  // correctly. Reactive routing ("upgrade after read_graph appears") fails in
-  // that parallel-call case because the upgrade comes one turn too late.
+  // Node schema is now embedded in the system prompt — no list_node_types call.
+  // Round 1 is read_graph; round 2 is apply_patch. Both need Pro's recipe-dialing.
   const calledTools = new Set<string>();
 
   for (let i = 0; i < MAX_ITERATIONS; i++) {
-    const preferModel: "flash" | "pro" = i === 0 ? "flash" : "pro";
+    const preferModel: "flash" | "pro" = "pro";
 
     const res = await fetch("/api/agent", {
       method: "POST",

@@ -4,6 +4,7 @@ import { useRef, useEffect, useState } from "react";
 import useUIStore from "@/store/uiStore";
 import useExecutionStore from "@/store/executionStore";
 import { Slider } from "@/components/ui/slider";
+import FullscreenModal from "./FullscreenModal";
 
 // Halve the source repeatedly until it's within 2x of the target, then return the
 // final canvas. Each halving uses a smooth bilinear average which acts as a low-pass
@@ -45,6 +46,7 @@ export default function ImageCanvas() {
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerSize, setContainerSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
   const [viewOriginal, setViewOriginal] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   // Find the first ImageInput's uploaded image as the "original" baseline.
   const originalBitmap = (() => {
@@ -80,8 +82,6 @@ export default function ImageCanvas() {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    // Compute display size that fits the container while preserving aspect ratio.
-    // Account for devicePixelRatio so retina screens stay crisp.
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const cw = Math.max(1, containerSize.w);
     const ch = Math.max(1, containerSize.h);
@@ -96,16 +96,12 @@ export default function ImageCanvas() {
     canvas.style.width = `${displayW}px`;
     canvas.style.height = `${displayH}px`;
 
-    // Pyramid downscale: halve the source repeatedly until within 2x of the target,
-    // then a final smooth draw. This is what proper image viewers (Photoshop) do
-    // and avoids the rainbow-band aliasing bilinear gives on dense content.
     const downscaled = pyramidDownscale(imageBitmap, targetW, targetH);
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = "high";
     ctx.clearRect(0, 0, targetW, targetH);
     ctx.drawImage(downscaled, 0, 0, targetW, targetH);
 
-    // Mask overlay (drawn at display res, also benefits from the smoother downscale)
     if (showMask && maskBitmap) {
       const m = pyramidDownscale(maskBitmap, targetW, targetH);
       const mc = new OffscreenCanvas(targetW, targetH);
@@ -135,13 +131,26 @@ export default function ImageCanvas() {
         <span className="text-xs font-mono text-zinc-400 tracking-widest uppercase">
           Output Preview
         </span>
-        {executionTime !== null && (
-          <div className="px-2 py-0.5 rounded-full bg-cyan-950/20 border border-cyan-900/50">
-            <span className="text-[10px] font-mono text-cyan-400">
-              {executionTime.toFixed(1)}ms
-            </span>
-          </div>
-        )}
+        <div className="flex items-center gap-2">
+          {executionTime !== null && (
+            <div className="px-2 py-0.5 rounded-full bg-cyan-950/20 border border-cyan-900/50">
+              <span className="text-[10px] font-mono text-cyan-400">
+                {executionTime.toFixed(1)}ms
+              </span>
+            </div>
+          )}
+          {imageBitmap && (
+            <button
+              onClick={() => setIsFullscreen(true)}
+              title="Open fullscreen"
+              className="p-1 rounded border border-zinc-800 text-zinc-500 hover:text-zinc-200 hover:border-zinc-700 hover:bg-zinc-900 transition-all"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 3h7v2H5v5H3zM14 3h7v7h-2V5h-5zM21 14v7h-7v-2h5v-5zM10 21H3v-7h2v5h5z" />
+              </svg>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Canvas area — fills remaining space */}
@@ -265,6 +274,17 @@ export default function ImageCanvas() {
           </div>
         )}
       </div>
+
+      {isFullscreen && imageBitmap && (
+        <FullscreenModal
+          imageBitmap={finalBitmap ?? imageBitmap}
+          originalBitmap={originalBitmap}
+          maskBitmap={maskBitmap}
+          showMask={showMask}
+          maskOverlayOpacity={maskOverlayOpacity}
+          onClose={() => setIsFullscreen(false)}
+        />
+      )}
     </div>
   );
 }

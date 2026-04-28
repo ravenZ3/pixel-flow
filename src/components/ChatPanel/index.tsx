@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { runAgent, ChatMessage, TokenUsage } from "@/lib/agent/loop";
+import useUIStore from "@/store/uiStore";
 
 type LogEntry =
   | { kind: "user"; text: string }
@@ -17,7 +18,8 @@ const EXAMPLES = [
 ];
 
 export default function ChatPanel() {
-  const [open, setOpen] = useState(true);
+  const open = useUIStore((s) => s.chatOpen);
+  const setOpen = useUIStore((s) => s.setChatOpen);
   const [input, setInput] = useState("");
   const [log, setLog] = useState<LogEntry[]>([]);
   const [busy, setBusy] = useState(false);

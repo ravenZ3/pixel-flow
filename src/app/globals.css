@@ -81,10 +81,9 @@ body {
 
 /* ===== SIDEBAR ===== */
 .sidebar {
-  width: 180px;
-  min-width: 180px;
+  width: 100%;
+  min-width: 0;
   background: var(--surface);
-  border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   padding: 0;

@@ -18,6 +18,8 @@ interface UIStore {
   activePreviewNodeId: string | null;
   showMask: boolean;
   maskOverlayOpacity: number;
+  chatOpen: boolean;
+  setChatOpen: (open: boolean) => void;
   setNodes: (nodes: Node[]) => void;
   setEdges: (edges: Edge[]) => void;
   onNodesChange: OnNodesChange;
@@ -50,6 +52,8 @@ const useUIStore = create<UIStore>((set, get) => ({
   activePreviewNodeId: null,
   showMask: false,
   maskOverlayOpacity: 0.5,
+  chatOpen: true,
+  setChatOpen: (chatOpen) => set({ chatOpen }),
 
   setNodes: (nodes) => set({ nodes }),
   setEdges: (edges) => set({ edges }),

@@ -1,5 +1,7 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { NextResponse } from "next/server";
+import fs from "fs";
+import path from "path";
 
 export const runtime = "nodejs";
 
@@ -209,9 +211,98 @@ export async function POST(req: Request) {
         }
       : null;
 
+    writeAgentLog({
+      timestamp: new Date().toISOString(),
+      model: usedModel,
+      system,
+      messages,
+      response: outBlocks,
+      stop_reason,
+      usage,
+      thinking: candidate?.content?.parts
+        ?.filter((p: { thought?: boolean; text?: string }) => p.thought && p.text)
+        .map((p: { text?: string }) => p.text ?? "")
+        ?? [],
+    });
+
     return NextResponse.json({ content: outBlocks, stop_reason, model: usedModel, usage });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     return NextResponse.json({ error: msg }, { status: 500 });
+  }
+}
+
+function writeAgentLog(entry: {
+  timestamp: string;
+  model: string;
+  system: string;
+  messages: InMessage[];
+  response: InBlock[];
+  stop_reason: string;
+  usage: { input: number; output: number; thinking: number; total: number } | null;
+  thinking: string[];
+}) {
+  try {
+    const logsDir = path.join(process.cwd(), "src", "logs");
+    if (!fs.existsSync(logsDir)) fs.mkdirSync(logsDir, { recursive: true });
+
+    const slug = entry.timestamp.replace(/[:.]/g, "-");
+    const filePath = path.join(logsDir, `${slug}.txt`);
+
+    const lines: string[] = [];
+
+    lines.push(`=== PIXEL FLOW AGENT LOG ===`);
+    lines.push(`Timestamp : ${entry.timestamp}`);
+    lines.push(`Model     : ${entry.model}`);
+    if (entry.usage) {
+      lines.push(`Tokens    : ${entry.usage.total} total  (${entry.usage.input} in / ${entry.usage.output} out / ${entry.usage.thinking} thinking)`);
+    }
+    lines.push(`Stop      : ${entry.stop_reason}`);
+    lines.push(``);
+
+    lines.push(`--- SYSTEM ---`);
+    lines.push(entry.system);
+    lines.push(``);
+
+    lines.push(`--- CONVERSATION (${entry.messages.length} messages) ---`);
+    for (const msg of entry.messages) {
+      lines.push(`[${msg.role.toUpperCase()}]`);
+      if (typeof msg.content === "string") {
+        lines.push(msg.content);
+      } else {
+        for (const block of msg.content) {
+          if (block.type === "text") {
+            lines.push(`  text: ${block.text}`);
+          } else if (block.type === "tool_use") {
+            lines.push(`  tool_use: ${block.name}`);
+            lines.push(`  input: ${JSON.stringify(block.input, null, 2)}`);
+          } else if (block.type === "tool_result") {
+            lines.push(`  tool_result for: ${block.tool_use_id}`);
+            lines.push(`  content: ${block.content}`);
+          }
+        }
+      }
+      lines.push(``);
+    }
+
+    if (entry.thinking.length > 0) {
+      lines.push(`--- THINKING ---`);
+      for (const t of entry.thinking) lines.push(t);
+      lines.push(``);
+    }
+
+    lines.push(`--- RESPONSE ---`);
+    for (const block of entry.response) {
+      if (block.type === "text") {
+        lines.push(`text: ${block.text}`);
+      } else if (block.type === "tool_use") {
+        lines.push(`tool_use: ${block.name}`);
+        lines.push(`input: ${JSON.stringify(block.input, null, 2)}`);
+      }
+    }
+
+    fs.writeFileSync(filePath, lines.join("\n"), "utf8");
+  } catch (err) {
+    console.warn("[agent] Failed to write log:", err);
   }
 }

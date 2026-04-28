@@ -63,6 +63,7 @@ function NodeEditorInner() {
   const onEdgesChange = useUIStore((s) => s.onEdgesChange);
   const onConnect = useUIStore((s) => s.onConnect);
   const addNode = useUIStore((s) => s.addNode);
+  const setChatOpen = useUIStore((s) => s.setChatOpen);
   const markAllDirty = useExecutionStore((s) => s.markAllDirty);
 
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
@@ -176,6 +177,7 @@ function NodeEditorInner() {
         onEdgesDelete={onEdgesDelete}
         isValidConnection={isValidConnection}
         nodeTypes={nodeTypes}
+        onPaneClick={() => setChatOpen(false)}
         onPaneContextMenu={(e) => e.preventDefault()}
         fitView
         deleteKeyCode="Backspace"

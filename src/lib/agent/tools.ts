@@ -9,12 +9,6 @@ export type AnthropicTool = {
 
 export const tools: AnthropicTool[] = [
   {
-    name: "list_node_types",
-    description:
-      "List every available node type with its description, input/output handles, and parameter schema. Call this first when planning a new graph so you know which nodes exist and how to wire them.",
-    input_schema: { type: "object", properties: {}, additionalProperties: false },
-  },
-  {
     name: "read_graph",
     description:
       "Return the current graph: all nodes (id, type, data) and all edges (source/target handle pairs). Use this to understand what already exists before modifying.",
