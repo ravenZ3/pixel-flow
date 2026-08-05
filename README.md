@@ -2,12 +2,11 @@
 
 Pixel Flow is a node-based image editor that runs entirely in the browser. No install, no diffusion model, no server-side rendering. You describe a look, an agent builds the pipeline, and you get a graph you can inspect, tweak, and rerun.
 
-```
-"true detective season 1 vibe, really commit to it"
-    |
-    v
-ImageInput -> Curves -> SplitToning -> Vignette -> Grain -> Output
-```
+> "true detective season 1 vibe, really commit to it"
+
+![Node graph built from that prompt: ImageInput into Curves, SplitToning, Vignette, and Grain, ending at Output](public/portfolio/graph-example.png)
+
+![Pixel Flow demo: describing a look in chat and watching the agent build a node graph live on the canvas](public/portfolio/demo.gif)
 
 ## Why this exists
 
@@ -33,6 +32,43 @@ Pixel Flow bets on the opposite approach: deterministic image graphs as the unit
 **Share a graph as a URL.** Click Share Graph and a link encoding the whole pipeline copies to your clipboard. Anyone who opens it gets the graph fully hydrated, ready to run against a new image. Runtime state like uploaded images and drawn masks is stripped before encoding, so links stay small and private.
 
 **A workspace built for graphs that grow.** The sidebar groups nodes by category (Source, Adjust, Stylize, Generate, Composite, Output) with color-coded dots and search. A minimap appears once a graph gets big enough to need one. The preview canvas pyramid-downscales before drawing, which kills the moire and rainbow aliasing that dense outputs like ASCII and halftones tend to produce. Templates let you save common pipelines locally and delete them with a hover.
+
+## Examples
+
+Two raw shots, graded by the agent from a text prompt, no manual retouching.
+
+<table>
+<tr>
+<td align="center" width="50%"><strong>Before</strong></td>
+<td align="center" width="50%"><strong>After</strong></td>
+</tr>
+<tr>
+<td><img src="public/portfolio/tree-before.jpg" alt="Bare trees over a garden pond, unedited" width="100%"></td>
+<td><img src="public/portfolio/tree-after.jpg" alt="Same scene after Pixel Flow grading: muted greens, warm highlights, magenta-tinted shadows" width="100%"></td>
+</tr>
+<tr>
+<td colspan="2">
+
+> "Soft cinematic film look with muted greens, warm highlights, magenta-tinted shadows, lifted blacks, moderate contrast, subtle vignette, and enhanced texture."
+
+</td>
+</tr>
+<tr>
+<td align="center" width="50%"><strong>Before</strong></td>
+<td align="center" width="50%"><strong>After</strong></td>
+</tr>
+<tr>
+<td><img src="public/portfolio/ship-before.jpg" alt="Rusted shipwreck on an Icelandic beach, unedited" width="100%"></td>
+<td><img src="public/portfolio/ship-after.jpg" alt="Same shipwreck after Pixel Flow grading: tasteful color grade, natural dynamic range, subtle texture" width="100%"></td>
+</tr>
+<tr>
+<td colspan="2">
+
+> "Edit this photo like a professional photographer. Enhance mood, depth, and subject separation while preserving realism. Apply tasteful color grading, balanced contrast, natural dynamic range, and subtle texture. Avoid HDR, oversharpening, halos, or artificial colors."
+
+</td>
+</tr>
+</table>
 
 ## Quick start
 
